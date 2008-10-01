@@ -1,0 +1,214 @@
+#!/usr/bin/perl
+use strict;
+$|++;
+
+my $VERSION = '0.09';
+
+#----------------------------------------------------------------------------
+
+=head1 NAME
+
+cpanstats-select - select stats from the CPAN Testers Statistics database.
+
+=head1 SYNOPSIS
+
+  perl cpanstats-select             \
+    [--database=<db>]               \
+    [--nntp|-n=<nntpid>]            \
+    [--grade|-g=<grade>]            \
+    [--disto|-m=<distname>]         \
+    [--dist|-d=<distname>]          \
+    [--version|-v=<distversion>]    \
+    [--date|-y=<YYYYMM>]            \
+    [--tester|-t=<email>]           \
+    [--platform|-o=<platform>]      \
+    [--perl|-p=<perlversion>]       \
+    [--help|-h]
+
+=head1 DESCRIPTION
+
+Using the cpanstats database, which should be in the local directory, extracts
+all the required data.
+
+=head1 OPTIONS
+
+=over 4
+
+=item --database
+
+Specify the exact path to the cpanstats database if not ./cpanstats.db.
+
+=back
+
+=cut
+
+# -------------------------------------
+# Library Modules
+
+use lib qw(./lib ../lib);
+
+use DBI;
+use Getopt::ArgvFile default=>1;
+use Getopt::Long;
+
+use CPAN::WWW::Testers::Generator::Database;
+
+# -------------------------------------
+# Variables
+
+use constant    DATABASE    => 'cpanstats.db';
+
+my (%options);
+
+# -------------------------------------
+# Program
+
+##### INITIALISE #####
+
+init_options();
+
+$options{database} ||= DATABASE;
+
+my $dbi = CPAN::WWW::Testers::Generator::Database->new(database => $options{database}, AutoCommit => 1);
+print STDERR "Cannot connect to database [$options{database}]\n"    unless($dbi);
+
+
+##### MAIN #####
+
+#       '(id,state,postdate,tester,dist,version,platform,perl) '.
+
+my $sql = "SELECT * FROM cpanstats WHERE ";
+my @where;
+
+# only one of the following at a time
+@where = ("dist like '%$options{distro}%'")     if(defined $options{distro});
+@where = ("dist='$options{dist}'")          if(defined $options{dist});
+@where = ("id=$options{nntp}")              if(defined $options{nntp});
+
+push @where, "state='$options{grade}'"              if(defined $options{grade});
+push @where, "version='$options{version}'"      if(defined $options{version});
+push @where, "version LIKE '%$options{distversion}%'"   if(defined $options{distversion});
+push @where, "postdate='$options{date}'"        if(defined $options{date});
+push @where, "tester LIKE '%$options{tester}%'"     if(defined $options{tester} && $options{tester} ne '-');
+push @where, "tester=''"                if(defined $options{tester} && $options{tester} eq '-');
+push @where, "platform like '$options{platform}%'"  if(defined $options{platform} && $options{platform} ne '-');
+push @where, "platform=''"              if(defined $options{platform} && $options{platform} eq '-');
+push @where, "perl='$options{perl}'"            if(defined $options{perl} && $options{perl} ne '-');
+push @where, "perl=''"                  if(defined $options{perl} && $options{perl} eq '-');
+
+if(@where) {
+    my @rows = $dbi->get_query($sql . join(' AND ',@where));
+    if(@rows) {
+        for my $row (@rows) {
+            print join(",",@$row) . "\n";
+    }
+    } else {
+        print "Sorry, no results returned\n";
+    }
+} else {
+    print "No SQL arguments given\n";
+}
+
+
+# -------------------------------------
+# Subroutines
+
+sub init_options {
+    GetOptions( \%options,
+        'database=s',
+        'nntp|n=s',
+        'grade|g=s',
+        'distro|m=s',
+        'dist|d=s',
+        'distversion|x=s',
+        'platform|o=s',
+        'perl|p=s',
+        'tester|t=s',
+        'version|v=s',
+        'date|y=s',
+        'help|h',
+        'version|V'
+    );
+
+    _help(1) if($options{help});
+    _help(0) if($options{Version});
+
+    $options{grade} = lc $options{grade}    if($options{grade});
+}
+
+sub _help {
+    my $full = shift;
+
+    if($full) {
+        print <<HERE;
+
+Usage: $0
+    [--database=<db>]               - path to cpanstats database
+
+    [--nntp|-n=<nntpid>]            - NNTP article id
+    [--grade|-g=<grade>]            - report grade
+    [--dist|-d=<distname>]          - distribution name
+    [--disto|-m=<distname>]         - distribution name (partial match)
+    [--version|-v=<distversion>]    - distribution version
+    [--date|-y=<YYYYMM>]            - year/month
+    [--tester|-t=<email>]           - tester email
+    [--platform|-o=<platform>]      - platform (partial match)
+    [--perl|-p=<perlversion>]       - perl version
+
+    [--help|-h]                     - this screen
+    [--Version|-V]                  - program version
+
+Notes:
+    - combine options (except help) to refine your search
+    - all entries (except distro and paltform) require an exact match
+    - only one of nntp, dist or distro (in order of preference) is accepted
+    - use '-' for tester, perl and platform to find blank entries
+
+HERE
+
+    }
+
+    print "$0 v$VERSION\n";
+    exit(0);
+}
+
+
+__END__
+
+=back
+
+=head1 BUGS, PATCHES & FIXES
+
+There are no known bugs at the time of this release. However, if you spot a
+bug or are experiencing difficulties, that is not explained within the POD
+documentation, please send bug reports and patches to the RT Queue (see below).
+
+Fixes are dependant upon their severity and my availablity. Should a fix not
+be forthcoming, please feel free to (politely) remind me.
+
+RT Queue -
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+
+=head1 SEE ALSO
+
+L<CPAN::WWW::Testers>,
+L<CPAN::Testers::WWW::Statistics>
+
+F<http://www.cpantesters.org/>,
+F<http://stats.cpantesters.org/>,
+F<http://wiki.cpantesters.org/>
+
+=head1 AUTHOR
+
+Barbie, E<lt>barbie@cpan.orgE<gt>
+for Miss Barbell Productions L<http://www.missbarbell.co.uk>.
+
+=head1 COPYRIGHT AND LICENSE
+
+  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions
+  All Rights Reserved.
+
+  This module is free software; you can redistribute it and/or
+  modify it under the same terms as Perl itself.
+
+=cut

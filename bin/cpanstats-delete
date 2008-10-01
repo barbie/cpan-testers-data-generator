@@ -1,0 +1,197 @@
+#!/usr/bin/perl
+use strict;
+$|++;
+
+my $VERSION = '0.11';
+
+#----------------------------------------------------------------------------
+
+=head1 NAME
+
+cpanstats-delete - script to delete entries from the cpanstats database.
+
+=head1 SYNOPSIS
+
+  perl cpanstats-delete [-a=0] [-d=0] [--database=$db] [--file=$file]
+
+=head1 DESCRIPTION
+
+Using the cpanstats database, which should in the local directory, extracts
+all the data into the components of each page. Creates the graphs, then
+creates each HTML page of the site.
+
+=head1 OPTIONS
+
+=over 4
+
+=item -a | --all
+
+Delete all the NNTP ids greater than the specified number.
+
+=item -d | --delete
+
+Delete a single NNTP id.
+
+=item --database
+
+Specify the exact path to the cpanstats database if not ./cpanstats.db.
+
+=item --file
+
+Named file used when deleting a list of NNTP ids.
+
+=back
+
+=cut
+
+# -------------------------------------
+# Library Modules
+
+use lib qw(./lib ../lib);
+
+use DBI;
+use Getopt::Long;
+use IO::File;
+
+use CPAN::WWW::Testers::Generator::Database;
+
+# -------------------------------------
+# Variables
+
+use constant    DATABASE    => 'cpanstats.db';
+
+my (%options);
+
+# -------------------------------------
+# Program
+
+##### INITIALISE #####
+
+init_options();
+
+$options{database} ||= DATABASE;
+
+my $dbi = CPAN::WWW::Testers::Generator::Database->new(database => $options{database}, AutoCommit => 1);
+print STDERR "Cannot connect to database [$options{database}]\n"	unless($dbi);
+
+
+##### MAIN #####
+
+my @list = get_list();
+for my $id (@list) {
+	print "Deleting ... $id\n";
+	$dbi->do_query("DELETE from cpanstats WHERE id=$id");
+}
+
+do_query("DELETE from cpanstats WHERE id>$options{all}")	if($options{all});
+do_query("DELETE from cpanstats WHERE id=$options{delete}")	if($options{delete});
+
+# -------------------------------------
+# Subroutines
+
+=item get_list
+
+Returns the list of NNTP ids from the named file.
+
+=cut
+
+sub get_list {
+	my @list;
+	my $file = $options{file} || return ();
+	die "file [$file] not found"	unless(-f $file);
+
+	my $fh = IO::File->new($file)	or die "Cannot open file [$file]: $!";
+	while(<$fh>) {
+		chomp;
+		my ($num) = (m/^(\d+)/);
+		push @list, $num	if($num);
+	}
+	$fh->close;
+	return @list;
+}
+
+=item init_options
+
+Determine command line options and initialise any defaults.
+
+=cut
+
+sub init_options {
+    GetOptions( \%options,
+        'all|a=i',
+        'delete|d=i',
+        'database=s',
+        'file=s',
+        'help|h',
+        'version|V'
+    );
+
+    _help(1) if($options{help});
+    _help(0) if($options{version});
+}
+
+sub _help {
+    my $full = shift;
+
+    if($full) {
+        print <<HERE;
+
+Usage: $0 \\
+         [--database=<db>] \\
+	 ( --all=<num> | --delete=<num> | --file=<file> ) \\
+	 [-h] [-V]
+
+  --database=<db>   use named database
+  --all=<num>       delete all entried greater than given id
+  --delete=<num>    delete given id
+  --file=<file>     delete multiple ids (1 per line)
+  -h                this help screen
+  -V                program version
+
+HERE
+
+    }
+
+    print "$0 v$VERSION\n";
+    exit(0);
+}
+
+__END__
+
+=back
+
+=head1 BUGS, PATCHES & FIXES
+
+There are no known bugs at the time of this release. However, if you spot a
+bug or are experiencing difficulties, that is not explained within the POD
+documentation, please send bug reports and patches to the RT Queue (see below).
+
+Fixes are dependant upon their severity and my availablity. Should a fix not
+be forthcoming, please feel free to (politely) remind me.
+
+RT Queue -
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+
+=head1 SEE ALSO
+
+L<CPAN::WWW::Testers>,
+L<CPAN::Testers::WWW::Statistics>
+
+F<http://www.cpantesters.org/>,
+F<http://stats.cpantesters.org/>,
+F<http://wiki.cpantesters.org/>
+
+=head1 AUTHOR
+
+  Barbie, <barbie@cpan.org>
+  for Miss Barbell Productions <http://www.missbarbell.co.uk>.
+
+=head1 COPYRIGHT AND LICENSE
+
+  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+
+  This module is free software; you can redistribute it and/or 
+  modify it under the same terms as Perl itself.
+
+=cut
+

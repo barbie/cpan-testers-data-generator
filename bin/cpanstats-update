@@ -1,0 +1,215 @@
+#!/usr/bin/perl
+use strict;
+$|++;
+
+my $VERSION = '0.06';
+
+#----------------------------------------------------------------------------
+
+=head1 NAME
+
+cpanstats-update - script to update entries in the cpanstats database.
+
+=head1 SYNOPSIS
+
+  perl cpanstats-update [-i=0] [--database=$db] [--file=$file]
+
+=head1 DESCRIPTION
+
+Using the cpanstats database, which should in the local directory, will search
+for records matching the given id on the command line, or the list provided in
+a named file. If the named file is correctly formatted, the nominated columns
+will also be updated.
+
+=head1 OPTIONS
+
+=over 4
+
+=item -i | --id
+
+Display the record matching the given NNTP id.
+
+=item --database
+
+Specify the exact path to the cpanstats database if not ./cpanstats.db.
+
+=item --file
+
+The named file will be used to retrieve a list of NNTP ids, and if correctly
+formatted will update columns for the nominated id.
+
+To display records for a list of ids, the file should look like:
+
+  1
+  2
+  3
+  4
+
+To update columns for given ids, the file should look like:
+
+  1,state='pass'
+  2,state='pass',dist='MyDist'
+
+Note that the second entry will update multiple columns
+
+=back
+
+=cut
+
+# -------------------------------------
+# Library Modules
+
+use lib qw(./lib ../lib);
+
+use DBI;
+use Getopt::Long;
+use IO::File;
+
+use CPAN::WWW::Testers::Generator::Database;
+
+# -------------------------------------
+# Variables
+
+use constant    DATABASE    => 'cpanstats.db';
+
+my (%options,@rows);
+
+# -------------------------------------
+# Program
+
+##### INITIALISE #####
+
+init_options();
+
+$options{database} ||= DATABASE;
+
+my $dbi = CPAN::WWW::Testers::Generator::Database->new(database => $options{database}, AutoCommit => 1);
+print STDERR "Cannot connect to database [$options{database}]\n"	unless($dbi);
+
+
+##### MAIN #####
+
+print "#id,state,postdate,tester,dist,version,platform,perl\n";
+my @list = get_list();
+push @list, {id=>$options{id}}    if($options{id});
+
+for my $item (@list) {
+    if($item->{set}) {
+        $dbi->do_query("UPDATE cpanstats SET $item->{set} WHERE id=$item->{id}");
+    }
+
+    @rows = $dbi->get_query("SELECT * FROM cpanstats WHERE id=$item->{id}");
+    print join(",",@$_)."\n"   for(@rows);
+}
+
+@rows = $dbi->get_query("SELECT max(id) FROM cpanstats");
+print "\n#MAX ID=$rows[0][0]\n" if(@rows);
+
+# -------------------------------------
+# Subroutines
+
+=item get_list
+
+Returns the list of NNTP ids from the named file.
+
+=cut
+
+sub get_list {
+    my @list;
+    my $file = $options{file} || return ();
+    die "file [$file] not found"	unless(-f $file);
+
+    my $fh = IO::File->new($file)	or die "Cannot open file [$file]: $!";
+    while(<$fh>) {
+        next    if(/^\s*$/);    # ignore empty lines
+        chomp;
+        my ($id,$str) = (m/^(\d+)(?:,(.*))?/);
+        push @list, {id=>$id,set=>$str} if($id);
+    }
+    $fh->close;
+
+    return @list;
+}
+
+=item init_options
+
+Determine command line options and initialise any defaults.
+
+=cut
+
+sub init_options {
+    GetOptions( \%options,
+        'database=s',
+        'id|i=i',
+        'file=s',
+        'help|h',
+        'version|V'
+    );
+
+    _help(1) if($options{help});
+    _help(0) if($options{version});
+}
+
+sub _help {
+    my $full = shift;
+
+    if($full) {
+        print <<HERE;
+
+Usage: $0 \\
+         [--database=<db>] [--id=<num>] [--file=<file>] \\
+	 [-h] [-V]
+
+  --database=<db>   use named database
+  --id=<num>        refresh this id
+  --file=<file>     refresh these ids (1 per line)
+  -h                this help screen
+  -V                program version
+
+HERE
+
+    }
+
+    print "$0 v$VERSION\n";
+    exit(0);
+}
+
+__END__
+
+=back
+
+=head1 BUGS, PATCHES & FIXES
+
+There are no known bugs at the time of this release. However, if you spot a
+bug or are experiencing difficulties, that is not explained within the POD
+documentation, please send bug reports and patches to the RT Queue (see below).
+
+Fixes are dependant upon their severity and my availablity. Should a fix not
+be forthcoming, please feel free to (politely) remind me.
+
+RT Queue -
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+
+=head1 SEE ALSO
+
+L<CPAN::WWW::Testers>,
+L<CPAN::Testers::WWW::Statistics>
+
+F<http://www.cpantesters.org/>,
+F<http://stats.cpantesters.org/>,
+F<http://wiki.cpantesters.org/>
+
+=head1 AUTHOR
+
+  Barbie, <barbie@cpan.org>
+  for Miss Barbell Productions <http://www.missbarbell.co.uk>.
+
+=head1 COPYRIGHT AND LICENSE
+
+  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+
+  This module is free software; you can redistribute it and/or
+  modify it under the same terms as Perl itself.
+
+=cut
+

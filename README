@@ -1,0 +1,115 @@
+NAME
+    CPAN::WWW::Testers::Generator - Download and summarize CPAN Testers data
+
+SYNOPSIS
+      % cpanstats
+      # ... wait patiently
+      # ... then use cpanstats.db, an SQLite database
+
+DESCRIPTION
+    This distribution was originally written by Leon Brocard to download and
+    summarize CPAN Testers data. However, much of the original code has been
+    rewritten to use the CPAN Testers Statistics database generation code. This
+    now means that all the CPAN Testers sites including the Reports site, the
+    Statistics site and the CPAN Dependencies site, can use the same database.
+
+    This module downloads articles from the cpan-testers newsgroup, generating or
+    updating an SQLite database containing all the most important information. You
+    can then query this database, or use CPAN::WWW::Testers to present it over the
+    web.
+
+    A good example query for Acme-Colour would be:
+
+      SELECT version, status, count(*) FROM reports WHERE
+      distribution = "Acme-Colour" group by version, status;
+
+    To create a database from scratch can take several hours, as there are now over
+    1.5 million articles in the newgroup. As such updating from a known copy of the
+    database is much more advisable. If you don't want to generate the database
+    yourself, you can obtain the latest official copy (compressed with gzip) at
+    http://devel.cpantesters.org/cpanstats.db.gz
+
+INTERFACE
+  The Constructor
+    * new
+        Instatiates the object CPAN::WWW::Testers::Generator.
+
+  Methods
+    * logfile
+
+        Accessor to set/get where the logging information is to be kept. Note 
+	that if this not set, no logging occurs.
+
+    * database
+
+        Accessor to set/get the database full path.
+
+    * directory
+
+        Accessor to set/get the directory where the database is to be created.
+
+    * generate
+
+        Starting from the last recorded article, retrieves all the more recent
+	articles from the NNTP server, parsing each and recording the articles 
+	that either upload announcements or reports.
+
+    * insert_article
+
+        Inserts the components of a parsed article into the database.
+
+DATABASE SCHEMA
+
+    The database schema is very straightforward, one main table with several
+    index tables to speed up searches. The main table is as below:
+
+      +--------------------------------+
+      | cpanstats                      |
+      +----------+---------------------+
+      | id       | INTEGER PRIMARY KEY |
+      | state    | TEXT                |
+      | postdate | TEXT                |
+      | tester   | TEXT                |
+      | dist     | TEXT                |
+      | version  | TEXT                |
+      | platform | TEXT                |
+      | perl     | TEXT                |
+      | osname   | TEXT                |
+      | osvers   | TEXT                |
+      | archname | TEXT                |
+      +----------+---------------------+
+
+HISTORY
+    The CPAN testers was conceived back in May 1998 by Graham Barr and Chris 
+    Nandor as a way to provide multi-platform testing for modules. Today there 
+    are over 1.5 million tester reports and more than 100 testers each month
+    giving valuable feedback for users and authors alike.
+      
+BECOME A TESTER
+    The objective of the CPAN Testers is to test as many of the distributions 
+    on CPAN as possible, on as many platforms as possible. The ultimate goal is
+    to improve the portability of the distributions on CPAN, and provide good 
+    feedback to the authors.
+
+    Whether you have a common platform or a very unusual one, you can help by 
+    testing modules you install and submitting reports. There are plenty of 
+    module authors who could use test reports and helpful feedback on their 
+    modules and distributions. 
+
+    If you'd like to get involved, please take a look at the CPAN Testers Wiki,
+    where you can learn how to install and configure one of the recommended 
+    smoke tools.
+
+    For further help and advice, please subscribe to the the CPAN Testers 
+    discussion mailing list.
+
+    CPAN Testers Wiki - http://wiki.cpantesters.org
+    CPAN Testers Discuss mailing list
+    - http://lists.cpan.org/showlist.cgi?name=cpan-testers-discuss
+
+AUTHOR
+    Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
+    Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008
+
+LICENSE
+    This code is distributed under the same license as Perl.

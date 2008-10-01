@@ -1,0 +1,198 @@
+#!/usr/bin/perl -w
+use strict;
+$|++;
+
+my $VERSION = '0.07';
+
+#----------------------------------------------------------------------------
+
+=head1 NAME
+
+cpanstats-reparse - script to reparse an NNTP article.
+
+=head1 SYNOPSIS
+
+  perl cpanstats-reparse			\
+    [--directory=<dir>]                         \
+    [--check|c] [--localonly|l]                 \
+    ( [--id=<nntpid>] | [--file=<filename>] )   \
+    [--exclude|x=<fields>]			\
+    [--help|h]
+
+=head1 DESCRIPTION
+
+This script is used to reparse an NNTP article, which may have been
+incorrectly parsed by the cpanstats, and should feature in the stats
+for the CPAN Testers Statistics database.
+
+Note that the "check" option will only go through the motions and will not
+update the local database, while the "localonly" option will ensure only the
+local articles.db database is used to reparse, no NNTP lookup is used.
+
+The ability to ignore field checking for specific fields is enabled via the
+use of the exclude option. Using a comma separated list you may enter one
+or more of the fields 'dist', 'version', 'from', 'perl' and 'platform'.
+This is useful for parsing a faulty report and then using upstats.pl to
+amend the appropriate field to the correct value.
+
+=cut
+
+# -------------------------------------
+# Library Modules
+
+use lib qw(./lib ../lib);
+
+use Cwd;
+use DBI;
+use Getopt::ArgvFile default=>1;
+use Getopt::Long;
+use IO::File;
+
+use CPAN::WWW::Testers::Generator;
+
+# -------------------------------------
+# Variables
+
+my (%options,@exclude);
+
+# -------------------------------------
+# Program
+
+##### INITIALISE #####
+
+init_options();
+
+my $directory = $options{directory} || cwd();
+my $t = CPAN::WWW::Testers::Generator->new(
+    directory   => $directory,
+    logfile     => $directory . '/logs/cpanstats.log'
+);
+
+# GetOptions allows several different ways of passing multiple values, this
+# line is to ensure we have a list as we want it :)
+my %exclude = map {$_ => 1} split(/,/,join(',',@exclude));
+$options{exclude} = \%exclude;
+
+##### MAIN #####
+
+my @list = get_list();
+$t->reparse(\%options,@list);
+
+# -------------------------------------
+# Subroutines
+
+=item get_list
+
+Returns the list of NNTP ids from the named file.
+
+=cut
+
+sub get_list {
+    my @list;
+
+    # we're only parsing one id
+    return ($options{id}) if(defined $options{id});
+
+    # we're parsing a list of ids
+    my $file = $options{file} || die "--file not specified";
+    die "file [$file] not found"    unless(-f $file);
+
+    my $fh = IO::File->new($file,'r')       or die "Cannot read file [$file]: $!";
+    while(<$fh>) {
+        chomp;
+        my ($num) = (m/^(\d+)/);
+        push @list, $num;
+    }
+    $fh->close;
+    return @list;
+}
+
+=item init_options
+
+Determine command line options and initialise any defaults.
+
+=cut
+
+sub init_options {
+    GetOptions( \%options,
+        'directory|d=s',
+        'check|c',
+        'localonly|l',
+        'id|i=i',
+        'file=s',
+        'exclude|x=s' => \@exclude,
+        'help|h',
+        'version|V'
+    );
+
+    _help(1) if($options{help});
+    _help(0) if($options{version});
+}
+
+sub _help {
+    my $full = shift;
+
+    if($full) {
+        print <<HERE;
+
+Usage: $0 \\
+         [-d=<directory>] [--check|c] [--localonly|l] \\
+	 ( --id|i=<num> | --file=<file> ) \\
+	 [--exclude=<list>] [-h] [-V]
+
+  -d=<directory>    use named directory
+  -c                check only do not update
+  -l		    local only lookup
+  -i=<num>          named id to reparse
+  --file=<file>     file containing ids to reparse
+  --exclude=<list>  exclude fields from parsing
+  -h                this help screen
+  -V                program version
+
+HERE
+
+    }
+
+    print "$0 v$VERSION\n";
+    exit(0);
+}
+
+__END__
+
+=back
+
+=head1 BUGS, PATCHES & FIXES
+
+There are no known bugs at the time of this release. However, if you spot a
+bug or are experiencing difficulties, that is not explained within the POD
+documentation, please send bug reports and patches to the RT Queue (see below).
+
+Fixes are dependant upon their severity and my availablity. Should a fix not
+be forthcoming, please feel free to (politely) remind me.
+
+RT Queue -
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+
+=head1 SEE ALSO
+
+L<CPAN::WWW::Testers>,
+L<CPAN::Testers::WWW::Statistics>
+
+F<http://www.cpantesters.org/>,
+F<http://stats.cpantesters.org/>,
+F<http://wiki.cpantesters.org/>
+
+=head1 AUTHOR
+
+  Barbie, <barbie@cpan.org>
+  for Miss Barbell Productions <http://www.missbarbell.co.uk>.
+
+=head1 COPYRIGHT AND LICENSE
+
+  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+
+  This module is free software; you can redistribute it and/or
+  modify it under the same terms as Perl itself.
+
+=cut
+
