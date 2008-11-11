@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                     CPAN-WWW-Testers-Generator
-version:                  0.30
+version:                  0.31
 abstract:                 Download and summarize CPAN Testers data
 author:
   - Barbie <barbie@cpan.org>
@@ -36,13 +36,13 @@ build_requires:
 provides:
   CPAN::WWW::Testers::Generator:
     file:     lib/CPAN/WWW/Testers/Generator.pm
-    version:  0.30
+    version:  0.31
   CPAN::WWW::Testers::Generator::Article:
     file:     lib/CPAN/WWW/Testers/Generator/Article.pm
-    version:  0.30
+    version:  0.31
   CPAN::WWW::Testers::Generator::Database:
     file:     lib/CPAN/WWW/Testers/Generator/Database.pm
-    version:  0.30
+    version:  0.31
 
 no_index:
   directory:

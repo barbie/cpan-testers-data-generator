@@ -4,15 +4,16 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.30';
+$VERSION = '0.31';
 
 #----------------------------------------------------------------------------
 # Library Modules
 
-use MIME::Base64;
-use MIME::QuotedPrint;
 use CPAN::DistnameInfo;
 use Email::Simple;
+use MIME::Base64;
+use MIME::QuotedPrint;
+use Time::Local;
 
 use base qw( Class::Accessor::Fast );
 
@@ -24,11 +25,25 @@ my %month = (
 	Jul => 7, Aug => 8, Sep => 9, Oct => 10, Nov => 11, Dec => 12,
 );
 
+my %regexes = (
+    # with time
+    1 => { re => qr/(?:\w+,)?\s+(\d+)\s+(\w+)\s+(\d+)\s+(\d+):(\d+)/,   f => [qw(day month year hour min)] },     # Wed, 13 September 2004 06:29
+    2 => { re => qr/(\d+)\s+(\w+)\s+(\d+)\s+(\d+):(\d+)/,               f => [qw(day month year hour min)] },     # 13 September 2004 06:29
+    3 => { re => qr/(\w+)?\s+(\d+),?\s+(\d+)\s+(\d+):(\d+)/,            f => [qw(month day year hour min)] },     # September 22, 1999 06:29
+
+    # just the date
+    4 => { re => qr/(?:\w+,)?\s+(\d+)\s+(\w+)\s+(\d+)/, f => [qw(day month year)] },  # Wed, 13 September 2004
+    5 => { re => qr/(\d+)\s+(\w+)\s+(\d+)/,             f => [qw(day month year)] },  # 13 September 2004
+    6 => { re => qr/(\w+)?\s+(\d+),?\s+(\d+)/,          f => [qw(month day year)] },  # September 22, 1999 06:29
+);
+
+
 #----------------------------------------------------------------------------
 # The Application Programming Interface
 
-__PACKAGE__->mk_accessors(qw(   postdate date status from distribution version
-                                perl osname osvers archname subject author));
+__PACKAGE__->mk_accessors(qw(
+                    postdate date epoch status from distribution version
+                    perl osname osvers archname subject author filename));
 
 sub new {
     my($class, $article) = @_;
@@ -50,40 +65,29 @@ sub new {
     $self->{from}    = $from;
     $self->{subject} = $subject;
 
-    ($self->{postdate},$self->{date}) = _parse_date($mail);
+    ($self->{postdate},$self->{date},$self->{epoch}) = _parse_date($mail);
 
     return $self;
 }
 
 sub _parse_date {
     my $mail = shift;
-    my ($date1,$date2) = _extract_date($mail->header("Date"));
+    my ($date1,$date2,$date3) = _extract_date($mail->header("Date"));
     my @received  = $mail->header("Received");
 
     for my $hdr (@received) {
         next    unless($hdr =~ /.*;\s+(.*)\s*$/);
-        my ($dt1,$dt2) = _extract_date($1);
+        my ($dt1,$dt2,$dt3) = _extract_date($1);
         if($dt2 > $date2 + 1200) {
             $date1 = $dt1;
             $date2 = $dt2;
+            $date3 = $dt3;
         }
     }
 
 #print STDERR "        ... X.[Date: ".($date||'')."]\n";
-    return($date1,$date2);
+    return($date1,$date2,$date3);
 }
-
-my %regexes = (
-    # with time
-    1 => { re => qr/(?:\w+,)?\s+(\d+)\s+(\w+)\s+(\d+)\s+(\d+):(\d+)/,   f => [qw(day month year hour min)] },     # Wed, 13 September 2004 06:29
-    2 => { re => qr/(\d+)\s+(\w+)\s+(\d+)\s+(\d+):(\d+)/,               f => [qw(day month year hour min)] },     # 13 September 2004 06:29
-    3 => { re => qr/(\w+)?\s+(\d+),?\s+(\d+)\s+(\d+):(\d+)/,            f => [qw(month day year hour min)] },     # September 22, 1999 06:29
-
-    # just the date
-    4 => { re => qr/(?:\w+,)?\s+(\d+)\s+(\w+)\s+(\d+)/, f => [qw(day month year)] },  # Wed, 13 September 2004
-    5 => { re => qr/(\d+)\s+(\w+)\s+(\d+)/,             f => [qw(day month year)] },  # 13 September 2004
-    6 => { re => qr/(\w+)?\s+(\d+),?\s+(\d+)/,          f => [qw(month day year)] },  # September 22, 1999 06:29
-);
 
 sub _extract_date {
     my $date = shift;
@@ -99,20 +103,24 @@ sub _extract_date {
         }
     }
 
-    return('000000','000000000000') unless(@fields && $index);
+    return('000000','000000000000',0) unless(@fields && $index);
 
     @fields{@{$regexes{$index}->{f}}} = @fields;
 
     $fields{month} = substr($fields{month},0,3);
-    return('000000','000000000000') unless($month{$fields{month}} && $fields{year} > 1998);
+    $fields{mon}   = $month{$fields{month}};
+    return('000000','000000000000',0) unless($fields{mon} && $fields{year} > 1998);
 
-    $fields{$_} ||= 0   for(qw(year month day hour min));
+    $fields{$_} ||= 0          for(qw(sec min hour day mon year));
+    my @date = map { $fields{$_} } qw(sec min hour day mon year);
 
 #print STDERR "#        ... 1.[$_][$fields{$_}]\n"   for(qw(year month day hour min));
-    my $short = sprintf "%04d%02d",             $fields{year}, $month{$fields{month}};
-    my $long  = sprintf "%04d%02d%02d%02d%02d", $fields{year}, $month{$fields{month}}, $fields{day}, $fields{hour}, $fields{min};
+    my $short = sprintf "%04d%02d",             $fields{year}, $fields{mon};
+    my $long  = sprintf "%04d%02d%02d%02d%02d", $fields{year}, $fields{mon}, $fields{day}, $fields{hour}, $fields{min};
+    $date[4]--;
+    my $epoch = timelocal(@date);
 
-    return($short,$long);
+    return($short,$long,$epoch);
 }
 
 sub parse_upload {
@@ -141,6 +149,7 @@ sub parse_upload {
     $self->distribution($d->dist);
     $self->version($d->version);
     $self->author($d->cpanid);
+    $self->filename($d->filename);
 
     return 1;
 }
@@ -185,6 +194,7 @@ sub parse_report {
     $self->perl($perl);
     $self->osname($osname || "");
     $self->osvers($osvers || "");
+    $self->filename($d->filename);
 
     unless($archname || $platform) {
   	    if($osname && $osvers)	{ $platform = "$osname-$osvers" }

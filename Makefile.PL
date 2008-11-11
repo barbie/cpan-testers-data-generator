@@ -16,6 +16,7 @@ WriteMakefile(
         'MIME::Base64'          => 0,
         'MIME::QuotedPrint'     => 0,
         'Net::NNTP'             => 0,
+        'Time::Local'           => 0,
         'version'               => 0,
 
         'Test::More'            => 0,       # only for testing

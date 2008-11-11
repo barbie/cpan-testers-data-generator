@@ -77,38 +77,48 @@ print STDERR "Cannot connect to database [$options{database}]\n"    unless($dbi)
 
 #       '(id,state,postdate,tester,dist,version,platform,perl) '.
 
-my $sql = "SELECT * FROM cpanstats WHERE ";
-my @where;
-
-# only one of the following at a time
-@where = ("dist like '%$options{distro}%'")     if(defined $options{distro});
-@where = ("dist='$options{dist}'")          if(defined $options{dist});
-@where = ("id=$options{nntp}")              if(defined $options{nntp});
-
-push @where, "state='$options{grade}'"              if(defined $options{grade});
-push @where, "version='$options{version}'"      if(defined $options{version});
-push @where, "version LIKE '%$options{distversion}%'"   if(defined $options{distversion});
-push @where, "postdate='$options{date}'"        if(defined $options{date});
-push @where, "tester LIKE '%$options{tester}%'"     if(defined $options{tester} && $options{tester} ne '-');
-push @where, "tester=''"                if(defined $options{tester} && $options{tester} eq '-');
-push @where, "platform like '$options{platform}%'"  if(defined $options{platform} && $options{platform} ne '-');
-push @where, "platform=''"              if(defined $options{platform} && $options{platform} eq '-');
-push @where, "perl='$options{perl}'"            if(defined $options{perl} && $options{perl} ne '-');
-push @where, "perl=''"                  if(defined $options{perl} && $options{perl} eq '-');
-
-if(@where) {
-    my @rows = $dbi->get_query($sql . join(' AND ',@where));
+if($options{sql}) {
+    my @rows = $dbi->get_query($options{sql});
     if(@rows) {
         for my $row (@rows) {
             print join(",",@$row) . "\n";
-    }
+        }
     } else {
         print "Sorry, no results returned\n";
     }
 } else {
-    print "No SQL arguments given\n";
-}
+    my $sql = "SELECT * FROM cpanstats WHERE ";
+    my @where;
 
+    # only one of the following at a time
+    @where = ("dist LIKE '\%$options{distro}\%'")           if(defined $options{distro});
+    @where = ("dist='$options{dist}'")                      if(defined $options{dist});
+    @where = ("id=$options{nntp}")                          if(defined $options{nntp});
+
+    push @where, "state='$options{grade}'"                  if(defined $options{grade});
+    push @where, "version='$options{version}'"              if(defined $options{version});
+    push @where, "version LIKE '\%$options{distversion}\%'" if(defined $options{distversion});
+    push @where, "postdate='$options{date}'"                if(defined $options{date});
+    push @where, "tester LIKE '\%$options{tester}\%'"       if(defined $options{tester} && $options{tester} ne '-');
+    push @where, "tester=''"                                if(defined $options{tester} && $options{tester} eq '-');
+    push @where, "platform LIKE '$options{platform}\%'"     if(defined $options{platform} && $options{platform} ne '-');
+    push @where, "platform=''"                              if(defined $options{platform} && $options{platform} eq '-');
+    push @where, "perl='$options{perl}'"                    if(defined $options{perl} && $options{perl} ne '-');
+    push @where, "perl=''"                                  if(defined $options{perl} && $options{perl} eq '-');
+
+    if(@where) {
+        my @rows = $dbi->get_query($sql . join(' AND ',@where));
+        if(@rows) {
+            for my $row (@rows) {
+                print join(",",@$row) . "\n";
+            }
+        } else {
+            print "Sorry, no results returned\n";
+        }
+    } else {
+        print "No SQL arguments given\n";
+    }
+}
 
 # -------------------------------------
 # Subroutines
@@ -116,6 +126,7 @@ if(@where) {
 sub init_options {
     GetOptions( \%options,
         'database=s',
+        'sql=s',
         'nntp|n=s',
         'grade|g=s',
         'distro|m=s',

@@ -1,5 +1,10 @@
 Revision history for Perl module CPAN::WWW::Testers::Generator.
 
+0.31	current
+	- added epoch to date extraction from article.
+	- added filename reference from CPAN-DistnameInfo.
+	- added ability to provide SQL string in bin/cpanstats-select (v0.09).
+
 0.30	01/10/2008
 	- ensure upload pattern matching is for the end of the string.
 	- add more option validation in bin/cpanstats-verify (v0.20).
