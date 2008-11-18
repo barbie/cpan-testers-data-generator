@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.07';
+my $VERSION = '0.08';
 
 #----------------------------------------------------------------------------
 
@@ -101,7 +101,7 @@ sub get_list {
     while(<$fh>) {
         chomp;
         my ($num) = (m/^(\d+)/);
-        push @list, $num;
+        push @list, $num    if($num);
     }
     $fh->close;
     return @list;
@@ -127,6 +127,16 @@ sub init_options {
 
     _help(1) if($options{help});
     _help(0) if($options{version});
+
+    unless($options{directory} && -d $options{directory}) {
+    	print "Source directory not found [$options{directory}]\n\n";
+	    _help(1);
+    }
+
+    unless($options{id} || -f $options{file}) {
+    	print "Must specify an ID or FILE to reparse\n\n";
+    	_help(1);
+    }
 }
 
 sub _help {
