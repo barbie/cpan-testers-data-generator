@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.06';
+my $VERSION = '0.07';
 
 #----------------------------------------------------------------------------
 
@@ -12,26 +12,33 @@ cpanstats-update - script to update entries in the cpanstats database.
 
 =head1 SYNOPSIS
 
-  perl cpanstats-update [-i=0] [--database=$db] [--file=$file]
+  perl cpanstats-update                 \
+     --config=<file>                    \
+     --database=<dbcode>                \
+     [-i=0] [--file=<file>]
 
 =head1 DESCRIPTION
 
-Using the cpanstats database, which should in the local directory, will search
-for records matching the given id on the command line, or the list provided in
-a named file. If the named file is correctly formatted, the nominated columns
-will also be updated.
+Using a nominated cpanstats database, this program will search for records 
+matching the given id on the command line, or the list provided in a named file. 
+If the named file is correctly formatted, the nominated columns will also be 
+updated.
 
 =head1 OPTIONS
 
 =over 4
 
-=item -i | --id
+=item --config
 
-Display the record matching the given NNTP id.
+Configuration file contain database access details.
 
 =item --database
 
-Specify the exact path to the cpanstats database if not ./cpanstats.db.
+Specify the database to use, CPANSTATS or LITESTATS
+
+=item -i | --id
+
+Display the record matching the given NNTP id.
 
 =item --file
 
@@ -59,18 +66,13 @@ Note that the second entry will update multiple columns
 # -------------------------------------
 # Library Modules
 
-use lib qw(./lib ../lib);
-
-use DBI;
+use Config::IniFiles;
+use CPAN::Testers::Common::DBUtils;
 use Getopt::Long;
 use IO::File;
 
-use CPAN::WWW::Testers::Generator::Database;
-
 # -------------------------------------
 # Variables
-
-use constant    DATABASE    => 'cpanstats.db';
 
 my (%options,@rows);
 
@@ -81,12 +83,6 @@ my (%options,@rows);
 
 init_options();
 
-$options{database} ||= DATABASE;
-
-my $dbi = CPAN::WWW::Testers::Generator::Database->new(database => $options{database}, AutoCommit => 1);
-print STDERR "Cannot connect to database [$options{database}]\n"	unless($dbi);
-
-
 ##### MAIN #####
 
 print "#id,state,postdate,tester,dist,version,platform,perl\n";
@@ -94,15 +90,19 @@ my @list = get_list();
 push @list, {id=>$options{id}}    if($options{id});
 
 for my $item (@list) {
+    @rows = $options{DB}->get_query('array',"SELECT * FROM cpanstats WHERE id=$item->{id}");
+    unless(@rows) {
+        $options{DB}->do_query("INSERT INTO cpanstats (id) VALUES ($item->{id})");
+    }
     if($item->{set}) {
-        $dbi->do_query("UPDATE cpanstats SET $item->{set} WHERE id=$item->{id}");
+        $options{DB}->do_query("UPDATE cpanstats SET $item->{set} WHERE id=$item->{id}");
     }
 
-    @rows = $dbi->get_query("SELECT * FROM cpanstats WHERE id=$item->{id}");
+    @rows = $options{DB}->get_query('array',"SELECT * FROM cpanstats WHERE id=$item->{id}");
     print join(",",@$_)."\n"   for(@rows);
 }
 
-@rows = $dbi->get_query("SELECT max(id) FROM cpanstats");
+@rows = $options{DB}->get_query('array',"SELECT max(id) FROM cpanstats");
 print "\n#MAX ID=$rows[0][0]\n" if(@rows);
 
 # -------------------------------------
@@ -117,13 +117,14 @@ Returns the list of NNTP ids from the named file.
 sub get_list {
     my @list;
     my $file = $options{file} || return ();
-    die "file [$file] not found"	unless(-f $file);
+    die "file [$file] not found"        unless(-f $file);
 
-    my $fh = IO::File->new($file)	or die "Cannot open file [$file]: $!";
+    my $fh = IO::File->new($file)       or die "Cannot open file [$file]: $!";
     while(<$fh>) {
         next    if(/^\s*$/);    # ignore empty lines
         chomp;
         my ($id,$str) = (m/^(\d+)(?:,(.*))?/);
+	$str =~ s/fulldate/date/	if($options{driver} =~ /sqlite/i);
         push @list, {id=>$id,set=>$str} if($id);
     }
     $fh->close;
@@ -139,32 +140,53 @@ Determine command line options and initialise any defaults.
 
 sub init_options {
     GetOptions( \%options,
+        'config=s',
         'database=s',
         'id|i=i',
         'file=s',
         'help|h',
-        'version|V'
+        'version|v'
     );
 
-    _help(1) if($options{help});
-    _help(0) if($options{version});
+    help(1) if($options{help});
+    help(0) if($options{version});
+
+    help(1,"Must specify the configuration file")              unless($options{config});
+    help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
+
+    help(1,"Must specify the database code (CPANSTATS or LITESTATS)")
+        unless($options{database} && $options{database} =~ /^CPANSTATS|LITESTATS$/);
+
+    # load configuration
+    my $cfg = Config::IniFiles->new( -file => $options{config} );
+
+    # configure databases
+    my $db = $options{database};
+    die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
+    my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+    $options{DB} = CPAN::Testers::Common::DBUtils->new(%opts);
+    die "Cannot configure $db database\n" unless($options{DB});
+
+    $options{driver} = $opts{driver};
 }
 
-sub _help {
-    my $full = shift;
+sub help {
+    my ($full,$mess) = @_;
+
+    print "\n$mess\n\n" if($mess);
 
     if($full) {
         print <<HERE;
 
-Usage: $0 \\
-         [--database=<db>] [--id=<num>] [--file=<file>] \\
-	 [-h] [-V]
+Usage: $0
+     --config=<file>                - configuration file
+     --database=<dbcode>            - CPANSTATS or LITESTATS
 
-  --database=<db>   use named database
-  --id=<num>        refresh this id
-  --file=<file>     refresh these ids (1 per line)
-  -h                this help screen
-  -V                program version
+    [--id=<num>]                    - refresh this id
+    [--file=<file>]                 - refresh these ids (1 per line)
+
+    [--help|-h]                     - this screen
+    [--Version|-v]                  - program version
 
 HERE
 
@@ -188,7 +210,7 @@ Fixes are dependant upon their severity and my availablity. Should a fix not
 be forthcoming, please feel free to (politely) remind me.
 
 RT Queue -
-http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 

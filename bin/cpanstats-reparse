@@ -12,16 +12,15 @@ cpanstats-reparse - script to reparse an NNTP article.
 
 =head1 SYNOPSIS
 
-  perl cpanstats-reparse			\
-    [--directory=<dir>]                         \
+  perl cpanstats-reparse                        \
+    --config=<file>                             \
     [--check|c] [--localonly|l]                 \
     ( [--id=<nntpid>] | [--file=<filename>] )   \
-    [--exclude|x=<fields>]			\
-    [--help|h]
+    [--exclude|x=<fields>]
 
 =head1 DESCRIPTION
 
-This script is used to reparse an NNTP article, which may have been
+This program is used to reparse an NNTP article, which may have been
 incorrectly parsed by the cpanstats, and should feature in the stats
 for the CPAN Testers Statistics database.
 
@@ -48,7 +47,7 @@ use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 use IO::File;
 
-use CPAN::WWW::Testers::Generator;
+use CPAN::Testers::Data::Generator   '0.31';
 
 # -------------------------------------
 # Variables
@@ -62,10 +61,8 @@ my (%options,@exclude);
 
 init_options();
 
-my $directory = $options{directory} || cwd();
-my $t = CPAN::WWW::Testers::Generator->new(
-    directory   => $directory,
-    logfile     => $directory . '/logs/cpanstats.log'
+my $t = CPAN::Testers::Data::Generator->new(
+    config => $options{config}
 );
 
 # GetOptions allows several different ways of passing multiple values, this
@@ -115,49 +112,46 @@ Determine command line options and initialise any defaults.
 
 sub init_options {
     GetOptions( \%options,
-        'directory|d=s',
+        'config=s',
         'check|c',
         'localonly|l',
         'id|i=i',
         'file=s',
         'exclude|x=s' => \@exclude,
         'help|h',
-        'version|V'
+        'version|v'
     );
 
-    _help(1) if($options{help});
-    _help(0) if($options{version});
+    help(1) if($options{help});
+    help(0) if($options{version});
 
-    unless($options{directory} && -d $options{directory}) {
-    	print "Source directory not found [$options{directory}]\n\n";
-	    _help(1);
-    }
+    help(1,"Must specify the configuration file")               unless($options{config});
+    help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
 
-    unless($options{id} || -f $options{file}) {
-    	print "Must specify an ID or FILE to reparse\n\n";
-    	_help(1);
-    }
+    help(1,"Must specify an ID or FILE to reparse")             unless($options{id} || -f $options{file});
 }
 
-sub _help {
-    my $full = shift;
+sub help {
+    my ($full,$mess) = @_;
+
+    print "\n$mess\n\n" if($mess);
 
     if($full) {
         print <<HERE;
 
-Usage: $0 \\
-         [-d=<directory>] [--check|c] [--localonly|l] \\
-	 ( --id|i=<num> | --file=<file> ) \\
-	 [--exclude=<list>] [-h] [-V]
+Usage: $0 --config=<file> \\
+         [--check|c] [--localonly|l] \\
+         ( --id|i=<num> | --file=<file> ) \\
+         [--exclude=<list>] [-h] [-v]
 
-  -d=<directory>    use named directory
+  --config=<file>   configuration file
   -c                check only do not update
-  -l		    local only lookup
+  -l                local only lookup
   -i=<num>          named id to reparse
   --file=<file>     file containing ids to reparse
   --exclude=<list>  exclude fields from parsing
   -h                this help screen
-  -V                program version
+  -v                program version
 
 HERE
 
@@ -181,7 +175,7 @@ Fixes are dependant upon their severity and my availablity. Should a fix not
 be forthcoming, please feel free to (politely) remind me.
 
 RT Queue -
-http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 

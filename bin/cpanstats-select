@@ -13,7 +13,11 @@ cpanstats-select - select stats from the CPAN Testers Statistics database.
 =head1 SYNOPSIS
 
   perl cpanstats-select             \
-    [--database=<db>]               \
+    --config=<file>                 \
+    --database=<dbcode>             \
+                                    \
+    [--sql=<sql>]                   \
+                                    \
     [--nntp|-n=<nntpid>]            \
     [--grade|-g=<grade>]            \
     [--disto|-m=<distname>]         \
@@ -22,8 +26,7 @@ cpanstats-select - select stats from the CPAN Testers Statistics database.
     [--date|-y=<YYYYMM>]            \
     [--tester|-t=<email>]           \
     [--platform|-o=<platform>]      \
-    [--perl|-p=<perlversion>]       \
-    [--help|-h]
+    [--perl|-p=<perlversion>]       
 
 =head1 DESCRIPTION
 
@@ -34,9 +37,13 @@ all the required data.
 
 =over 4
 
+=item --config
+
+Configuration file contain database access details.
+
 =item --database
 
-Specify the exact path to the cpanstats database if not ./cpanstats.db.
+Specify the database to use, CPANSTATS or LITESTATS
 
 =back
 
@@ -45,20 +52,15 @@ Specify the exact path to the cpanstats database if not ./cpanstats.db.
 # -------------------------------------
 # Library Modules
 
-use lib qw(./lib ../lib);
-
-use DBI;
+use Config::IniFiles;
+use CPAN::Testers::Common::DBUtils;
 use Getopt::ArgvFile default=>1;
 use Getopt::Long;
-
-use CPAN::WWW::Testers::Generator::Database;
 
 # -------------------------------------
 # Variables
 
-use constant    DATABASE    => 'cpanstats.db';
-
-my (%options);
+my (%options,$dbi);
 
 # -------------------------------------
 # Program
@@ -67,18 +69,12 @@ my (%options);
 
 init_options();
 
-$options{database} ||= DATABASE;
-
-my $dbi = CPAN::WWW::Testers::Generator::Database->new(database => $options{database}, AutoCommit => 1);
-print STDERR "Cannot connect to database [$options{database}]\n"    unless($dbi);
-
-
 ##### MAIN #####
 
 #       '(id,state,postdate,tester,dist,version,platform,perl) '.
 
 if($options{sql}) {
-    my @rows = $dbi->get_query($options{sql});
+    my @rows = $dbi->get_query('array',$options{sql});
     if(@rows) {
         for my $row (@rows) {
             print join(",",@$row) . "\n";
@@ -107,7 +103,7 @@ if($options{sql}) {
     push @where, "perl=''"                                  if(defined $options{perl} && $options{perl} eq '-');
 
     if(@where) {
-        my @rows = $dbi->get_query($sql . join(' AND ',@where));
+        my @rows = $dbi->get_query('array',$sql . join(' AND ',@where));
         if(@rows) {
             for my $row (@rows) {
                 print join(",",@$row) . "\n";
@@ -125,6 +121,7 @@ if($options{sql}) {
 
 sub init_options {
     GetOptions( \%options,
+        'config=s',
         'database=s',
         'sql=s',
         'nntp|n=s',
@@ -138,23 +135,40 @@ sub init_options {
         'version|v=s',
         'date|y=s',
         'help|h',
-        'version|V'
     );
 
-    _help(1) if($options{help});
-    _help(0) if($options{Version});
+    help(1) if($options{help});
 
     $options{grade} = lc $options{grade}    if($options{grade});
+
+    help(1,"Must specify the configuration file")              unless($options{config});
+    help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
+
+    help(1,"Must specify the database code (CPANSTATS or LITESTATS)")
+        unless($options{database} && $options{database} =~ /^CPANSTATS|LITESTATS$/);
+
+    # load configuration
+    my $cfg = Config::IniFiles->new( -file => $options{config} );
+
+    # configure databases
+    my $db = $options{database};
+    die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
+    my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+    $dbi = CPAN::Testers::Common::DBUtils->new(%opts);
+    die "Cannot configure $db database\n" unless($dbi);
 }
 
-sub _help {
-    my $full = shift;
+sub help {
+    my ($full,$mess) = @_;
+
+    print "\n$mess\n\n" if($mess);
 
     if($full) {
         print <<HERE;
 
 Usage: $0
-    [--database=<db>]               - path to cpanstats database
+     --config=<file>                - configuration file
+     --database=<dbcode>            - CPANSTATS or LITESTATS
 
     [--nntp|-n=<nntpid>]            - NNTP article id
     [--grade|-g=<grade>]            - report grade
@@ -167,7 +181,6 @@ Usage: $0
     [--perl|-p=<perlversion>]       - perl version
 
     [--help|-h]                     - this screen
-    [--Version|-V]                  - program version
 
 Notes:
     - combine options (except help) to refine your search
@@ -198,7 +211,7 @@ Fixes are dependant upon their severity and my availablity. Should a fix not
 be forthcoming, please feel free to (politely) remind me.
 
 RT Queue -
-http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-WWW-Testers-Generator
+http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 

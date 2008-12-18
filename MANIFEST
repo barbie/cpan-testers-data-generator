@@ -9,15 +9,16 @@ bin/cpanstats-reparse
 bin/cpanstats-select
 bin/cpanstats-update
 bin/cpanstats-verify
+examples/cpanstats-createdb
+examples/cpanstats-convert
 examples/generate.sh
-lib/CPAN/WWW/Testers/Generator.pm
-lib/CPAN/WWW/Testers/Generator/Article.pm
-lib/CPAN/WWW/Testers/Generator/Database.pm
+examples/settings-example.ini
+lib/CPAN/Testers/Data/Generator.pm
+lib/CPAN/Testers/Data/Generator/Article.pm
 t/01base.t
 t/10functions.t
 t/11article.t
 t/12generate.t
-t/13database.t
 t/90podtest.t
 t/91podcover.t
 t/94metatest.t
@@ -25,3 +26,4 @@ t/nntp/126015.txt
 t/nntp/125106.txt
 t/nntp/1804993.txt
 t/nntp/1805500.txt
+t/test-config.ini

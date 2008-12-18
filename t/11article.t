@@ -5,12 +5,12 @@ use lib 'lib';
 use Test::More tests => 39;
 use IO::File;
 
-use_ok('CPAN::WWW::Testers::Generator::Article');
+use_ok('CPAN::Testers::Data::Generator::Article');
 
 # PASS report
 my $article = readfile('t/nntp/126015.txt');
-my $a = CPAN::WWW::Testers::Generator::Article->new($article);
-isa_ok($a,'CPAN::WWW::Testers::Generator::Article');
+my $a = CPAN::Testers::Data::Generator::Article->new($article);
+isa_ok($a,'CPAN::Testers::Data::Generator::Article');
 ok($a->parse_report());
 is($a->from, 'Jost.Krieger+perl@rub.de (Jost Krieger+Perl)');
 is($a->postdate, '200403');
@@ -27,8 +27,8 @@ is($a->archname, 'sun4-solaris-thread-multi');
 
 # FAIL report
 $article = readfile('t/nntp/125106.txt');
-$a = CPAN::WWW::Testers::Generator::Article->new($article);
-isa_ok($a,'CPAN::WWW::Testers::Generator::Article');
+$a = CPAN::Testers::Data::Generator::Article->new($article);
+isa_ok($a,'CPAN::Testers::Data::Generator::Article');
 ok($a->parse_report());
 is($a->from, 'cpansmoke@alternation.net');
 is($a->postdate, '200403');
@@ -48,8 +48,8 @@ ok(!$a->parse_upload());
 
 # upload announcement
 $article = readfile('t/nntp/1804993.txt');
-$a = CPAN::WWW::Testers::Generator::Article->new($article);
-isa_ok($a,'CPAN::WWW::Testers::Generator::Article');
+$a = CPAN::Testers::Data::Generator::Article->new($article);
+isa_ok($a,'CPAN::Testers::Data::Generator::Article');
 ok($a->parse_upload());
 is($a->from, 'upload@pause.perl.org (PAUSE)');
 is($a->postdate, '200806');
@@ -62,7 +62,7 @@ ok(!$a->parse_report());
 
 # in reply to
 $article = readfile('t/nntp/1805500.txt');
-$a = CPAN::WWW::Testers::Generator::Article->new($article);
+$a = CPAN::Testers::Data::Generator::Article->new($article);
 ok(!$a);
 
 exit;
@@ -70,8 +70,8 @@ exit;
 
 # base64
 $article = readfile('t/nntp/1804993.txt');
-$a = CPAN::WWW::Testers::Generator::Article->new($article);
-isa_ok($a,'CPAN::WWW::Testers::Generator::Article');
+$a = CPAN::Testers::Data::Generator::Article->new($article);
+isa_ok($a,'CPAN::Testers::Data::Generator::Article');
 ok(!$a->parse_upload());
 ok($a->parse_report());
 is($a->from, 'cpansmoke@alternation.net');
@@ -91,8 +91,8 @@ is($a->archname, 'i586-linux');
 
 # quoted printable
 $article = readfile('t/nntp/1804993.txt');
-$a = CPAN::WWW::Testers::Generator::Article->new($article);
-isa_ok($a,'CPAN::WWW::Testers::Generator::Article');
+$a = CPAN::Testers::Data::Generator::Article->new($article);
+isa_ok($a,'CPAN::Testers::Data::Generator::Article');
 ok(!$a->parse_upload());
 ok($a->parse_report());
 is($a->from, 'cpansmoke@alternation.net');
@@ -107,9 +107,6 @@ is($a->perl, '5.8.0');
 is($a->osname, 'linux');
 is($a->osvers, '2.4.22-4tr');
 is($a->archname, 'i586-linux');
-
-
-
 
 
 

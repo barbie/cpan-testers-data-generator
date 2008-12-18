@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
-use Test::More tests => 20;
-use CPAN::WWW::Testers::Generator;
+use Test::More tests => 17;
+use CPAN::Testers::Data::Generator;
 
 my @perls = (
   {
@@ -26,18 +26,14 @@ my @perls = (
 #  },
 );
 
-my $t = CPAN::WWW::Testers::Generator->new();
-isa_ok($t,'CPAN::WWW::Testers::Generator');
-
-is($t->directory,'.');
-is($t->directory('here'),'here');
-is($t->directory,'here');
+my $t = CPAN::Testers::Data::Generator->new(config  => './t/test-config.ini');
+isa_ok($t,'CPAN::Testers::Data::Generator');
 
 foreach (@perls) {
   my $text = $_->{text};
   my $perl = $_->{perl};
 
-  my $version = CPAN::WWW::Testers::Generator::Article->_extract_perl_version(\$text);
+  my $version = CPAN::Testers::Data::Generator::Article->_extract_perl_version(\$text);
   is($version, $perl);
 }
 
@@ -52,7 +48,7 @@ my @testdates = (
 );
 
 for my $row (@testdates) {
-    my ($d1,$d2) = CPAN::WWW::Testers::Generator::Article::_extract_date($row->[0]);
+    my ($d1,$d2) = CPAN::Testers::Data::Generator::Article::_extract_date($row->[0]);
     is($d1,$row->[1],".. short date parse of '$row->[0]'");
     is($d2,$row->[2],".. long date parse of '$row->[0]'");
 }

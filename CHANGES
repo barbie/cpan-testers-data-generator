@@ -1,11 +1,23 @@
-Revision history for Perl module CPAN::WWW::Testers::Generator.
+Revision history for Perl module CPAN::Testers::Data::Generator.
 
-0.31	current
+0.31	18/12/2008
+	- name change to fit below the CPAN::Testers namespace.
 	- added epoch to date extraction from article.
 	- added filename reference from CPAN-DistnameInfo.
-	- added ability to provide SQL string in bin/cpanstats-select (v0.09).
-	- added better command line option parsing to bin/cpanstats-reparse 
-	  (v0.08).
+	- added ability to provide SQL string in bin/cpanstats-select.
+	- added better command line option parsing to bin/cpanstats-reparse.
+	- convert to use CPAN::Testers::Common::DBUtils.
+	- added MySQL cpanstats database to codebase.
+	- new scripts added to examples to handle database creation:
+	    examples/cpanstats-createdb (v0.01)
+	    examples/cpanstats-convert  (v0.01)
+	- update to bin scripts with latest code changes:
+	    bin/cpanstats	  (v0.05)
+	    bin/cpanstats-delete  (v0.12)
+	    bin/cpanstats-reparse (v0.08)
+	    bin/cpanstats-select  (v0.09)
+	    bin/cpanstats-update  (v0.07)
+	    bin/cpanstats-verify  (v0.21)
 
 0.30	01/10/2008
 	- ensure upload pattern matching is for the end of the string.
