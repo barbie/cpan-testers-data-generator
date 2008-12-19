@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                     CPAN-Testers-Data-Generator
-version:                  0.31
+version:                  0.32
 abstract:                 Download and summarize CPAN Testers data
 author:
   - Barbie <barbie@cpan.org>
@@ -38,10 +38,10 @@ build_requires:
 provides:
   CPAN::Testers::Data::Generator:
     file:     lib/CPAN/Testers/Data/Generator.pm
-    version:  0.31
+    version:  0.32
   CPAN::Testers::Data::Generator::Article:
     file:     lib/CPAN/Testers/Data/Generator/Article.pm
-    version:  0.31
+    version:  0.32
 
 no_index:
   directory:

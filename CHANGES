@@ -1,77 +1,85 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
-0.31	18/12/2008
-	- name change to fit below the CPAN::Testers namespace.
-	- added epoch to date extraction from article.
-	- added filename reference from CPAN-DistnameInfo.
-	- added ability to provide SQL string in bin/cpanstats-select.
-	- added better command line option parsing to bin/cpanstats-reparse.
-	- convert to use CPAN::Testers::Common::DBUtils.
-	- added MySQL cpanstats database to codebase.
-	- new scripts added to examples to handle database creation:
-	    examples/cpanstats-createdb (v0.01)
-	    examples/cpanstats-convert  (v0.01)
-	- update to bin scripts with latest code changes:
-	    bin/cpanstats	  (v0.05)
-	    bin/cpanstats-delete  (v0.12)
-	    bin/cpanstats-reparse (v0.08)
-	    bin/cpanstats-select  (v0.09)
-	    bin/cpanstats-update  (v0.07)
-	    bin/cpanstats-verify  (v0.21)
+0.32    19/12/2008
+        - added progress option to bin/cpanstats-verify (v0.22)
+        - fixes to Article.pm to attempt to correct missing osnames and osvers.
+        - added articles scripts that have been used behind the scenes for 
+          sometime:
+            bin/articles-verify   (v0.02)
+            bin/articles-view     (v0.02)
 
-0.30	01/10/2008
-	- ensure upload pattern matching is for the end of the string.
-	- add more option validation in bin/cpanstats-verify (v0.20).
+0.31    18/12/2008
+        - name change to fit below the CPAN::Testers namespace.
+        - added epoch to date extraction from article.
+        - added filename reference from CPAN-DistnameInfo.
+        - added ability to provide SQL string in bin/cpanstats-select.
+        - added better command line option parsing to bin/cpanstats-reparse.
+        - convert to use CPAN::Testers::Common::DBUtils.
+        - added MySQL cpanstats database to codebase.
+        - new scripts added to examples to handle database creation:
+            examples/cpanstats-createdb (v0.01)
+            examples/cpanstats-convert  (v0.01)
+        - update to bin scripts with latest code changes:
+            bin/cpanstats         (v0.05)
+            bin/cpanstats-delete  (v0.12)
+            bin/cpanstats-reparse (v0.08)
+            bin/cpanstats-select  (v0.09)
+            bin/cpanstats-update  (v0.07)
+            bin/cpanstats-verify  (v0.21)
 
-0.29	19/09/2008
-	- ignore any uploads that are not in a supported archive format used
-	  for testing.
+0.30    01/10/2008
+        - ensure upload pattern matching is for the end of the string.
+        - add more option validation in bin/cpanstats-verify (v0.20).
 
-0.28	18/09/2008
-	- added SQLite pragma 'auto_vacuum' to database creation.
-	- created an _init function to generate db/nntp objects in one place
-	- add --localonly option to help screen in bin/cpanstats-verify (v0.19)
-	- fixed test script to correctly do cmp_ok :)
+0.29    19/09/2008
+        - ignore any uploads that are not in a supported archive format used
+          for testing.
 
-0.27	11/09/2008
-	- added 'grade' option to search in bin/cpanstats-select (v0.08)
-	- fixed help text in bin/cpanstats-update (v0.06)
-	- fixed test bug in 12generate.t (I can't count!)
+0.28    18/09/2008
+        - added SQLite pragma 'auto_vacuum' to database creation.
+        - created an _init function to generate db/nntp objects in one place
+        - add --localonly option to help screen in bin/cpanstats-verify (v0.19)
+        - fixed test script to correctly do cmp_ok :)
 
-0.26	02/09/2008
-	- abstracted all database functionality out of Generator.pm into
-	  Database.pm, including database creation. All scripts updated too.
-	- database links changed to reference CPAN Testers development site.
-	- corrections to the database schema in POD
-	- several POD updates across all files, including
-	    bin/cpanstats	  (v0.04)
-	    bin/cpanstats-delete  (v0.11)
-	    bin/cpanstats-reparse (v0.07)
-	    bin/cpanstats-select  (v0.07)
-	    bin/cpanstats-update  (v0.05)
-	    bin/cpanstats-verify  (v0.18)
-	- fixed dependency in cpanstats
-	- consistently provided help|h and version|V options to all scripts
-	- fix to support old form of PAUSE uploads
-	- abstracted reparse code into Generator.pm from cpanstats-reparse
-	- more tests
+0.27    11/09/2008
+        - added 'grade' option to search in bin/cpanstats-select (v0.08)
+        - fixed help text in bin/cpanstats-update (v0.06)
+        - fixed test bug in 12generate.t (I can't count!)
 
-0.25	28/08/2008
-	- added POD about bugs and see also sections.
-	- fixed POD in scripts.
-	- added author to upload metadata, to save lookups elsewhere.
-	- renamed several supporting scripts:
-	    delstats    => bin/cpanstats-delete (v0.10)
-	    selectstats => bin/cpanstats-select (v0.06)
-	    upstats     => bin/cpanstats-update (v0.04)
-	    readstats   => bin/cpanstats-verify (v0.17)
-	- added further functionality to cpanstats-select.
-	- added bin/cpanstats-reparse (v0.06) to distribution
-	- added nostore option to not retain old articles in the articles
-	  database.
+0.26    02/09/2008
+        - abstracted all database functionality out of Generator.pm into
+          Database.pm, including database creation. All scripts updated too.
+        - database links changed to reference CPAN Testers development site.
+        - corrections to the database schema in POD
+        - several POD updates across all files, including
+            bin/cpanstats         (v0.04)
+            bin/cpanstats-delete  (v0.11)
+            bin/cpanstats-reparse (v0.07)
+            bin/cpanstats-select  (v0.07)
+            bin/cpanstats-update  (v0.05)
+            bin/cpanstats-verify  (v0.18)
+        - fixed dependency in cpanstats
+        - consistently provided help|h and version|V options to all scripts
+        - fix to support old form of PAUSE uploads
+        - abstracted reparse code into Generator.pm from cpanstats-reparse
+        - more tests
 
-0.24	19/08/2008
-	- added bin/readstats (v0.16), bin/delstats (v0.09),
+0.25    28/08/2008
+        - added POD about bugs and see also sections.
+        - fixed POD in scripts.
+        - added author to upload metadata, to save lookups elsewhere.
+        - renamed several supporting scripts:
+            delstats    => bin/cpanstats-delete (v0.10)
+            selectstats => bin/cpanstats-select (v0.06)
+            upstats     => bin/cpanstats-update (v0.04)
+            readstats   => bin/cpanstats-verify (v0.17)
+        - added further functionality to cpanstats-select.
+        - added bin/cpanstats-reparse (v0.06) to distribution
+        - added nostore option to not retain old articles in the articles
+          database.
+
+0.24    19/08/2008
+        - added bin/readstats (v0.16), bin/delstats (v0.09),
           bin/selectstats (v0.05) and bin/upstats (v0.03) from the non-CPAN
           cpanstats distribution.
         - updated all scripts to use an options hash rather than individual
@@ -79,52 +87,52 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
         - added new Database.pm module to handle all local DB interaction.
         - fixed test bug in t/12generate.t (thanks to Slaven Rezic).
 
-0.23	18/08/2008
-	- new maintainer: Barbie.
-	- major overhaul to draw in CPAN Testers Statistics code.
-	- added version to Article.pm.
-	- added ability to decode QuotedPrintable and Base64 (Article.pm)
-	- added functionality to parse the upload articles as well as the
-	  report articles (Article.pm).
-	- added more reliable subject parsing.
-	- added more reliable Perl -V parsing.
-	- testers.db now renamed to cpanstats.db.
-	- news.db now renamed to articles.db.
-	- field names changed: 
-	    status => state, 
-	    distribution => dist, 
-	    archname => platform.
-	- new fields added: postdate,tester.
-	- fixed prerequisites in modules, Makefile.PL and META.yml.
-	- bin/cpan_www_testers_generate replaced with bin/cpanstats.pl
-	- added more test samples
-	- added more tests
+0.23    18/08/2008
+        - new maintainer: Barbie.
+        - major overhaul to draw in CPAN Testers Statistics code.
+        - added version to Article.pm.
+        - added ability to decode QuotedPrintable and Base64 (Article.pm)
+        - added functionality to parse the upload articles as well as the
+          report articles (Article.pm).
+        - added more reliable subject parsing.
+        - added more reliable Perl -V parsing.
+        - testers.db now renamed to cpanstats.db.
+        - news.db now renamed to articles.db.
+        - field names changed: 
+            status => state, 
+            distribution => dist, 
+            archname => platform.
+        - new fields added: postdate,tester.
+        - fixed prerequisites in modules, Makefile.PL and META.yml.
+        - bin/cpan_www_testers_generate replaced with bin/cpanstats.pl
+        - added more test samples
+        - added more tests
 
-0.22	Thu Feb  3 15:27:41 GMT 2005
-	- now includes perl + OS version in the testers.db
-	- use SQLite 3.0
-	- bin/cpan_www_testers_generate expanded to give more
-	  flexibility for execution
-	- added Makefile.PL (as per TODO)
-	- added tests
-	- added more POD
-	- (thanks to Barbie)
+0.22    Thu Feb  3 15:27:41 GMT 2005
+        - now includes perl + OS version in the testers.db
+        - use SQLite 3.0
+        - bin/cpan_www_testers_generate expanded to give more
+          flexibility for execution
+        - added Makefile.PL (as per TODO)
+        - added tests
+        - added more POD
+        - (thanks to Barbie)
 
-0.21	Sun Mar  7 18:31:35 GMT 2004
-	- the NNTP cache now uses SQLite instead of DB_File
-	- rename Changes to CHANGES
+0.21    Sun Mar  7 18:31:35 GMT 2004
+        - the NNTP cache now uses SQLite instead of DB_File
+        - rename Changes to CHANGES
 
-0.20	Wed Aug 13 21:52:06 BST 2003
-	- make sure to HTML escape everything
-	- design update, now with CSS
-	- Fix bug where reports are use A/AM/AMS/Crypt-TEA-1.22.tar.gz
-	  instead of Crypt-TEA-1.22.tar.gz
-	- added a TODO
-	- sort using version, not Sort::Version
-	- renamed to CPAN::WWW::Testers::Generator
-	- included HISTORY section by Elaine Ashton
-	- moved examples/generate.pl to an installed script,
-	  bin/cpan_www_testers_generate
+0.20    Wed Aug 13 21:52:06 BST 2003
+        - make sure to HTML escape everything
+        - design update, now with CSS
+        - Fix bug where reports are use A/AM/AMS/Crypt-TEA-1.22.tar.gz
+          instead of Crypt-TEA-1.22.tar.gz
+        - added a TODO
+        - sort using version, not Sort::Version
+        - renamed to CPAN::WWW::Testers::Generator
+        - included HISTORY section by Elaine Ashton
+        - moved examples/generate.pl to an installed script,
+          bin/cpan_www_testers_generate
 
-0.10	Thu Jul 31 23:09:25 BST 2003
-	- initial release
+0.10    Thu Jul 31 23:09:25 BST 2003
+        - initial release

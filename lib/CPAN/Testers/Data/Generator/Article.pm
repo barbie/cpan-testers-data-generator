@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.31';
+$VERSION = '0.32';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -37,6 +37,7 @@ my %regexes = (
     6 => { re => qr/(\w+)?\s+(\d+),?\s+(\d+)/,          f => [qw(month day year)] },  # September 22, 1999 06:29
 );
 
+my $OSNAMES = qr/(cygwin|freebsd|netbsd|openbsd|darwin|linux|cygwin|darwin|MSWin32|dragonfly|solaris)/i;
 
 #----------------------------------------------------------------------------
 # The Application Programming Interface
@@ -160,7 +161,7 @@ sub parse_report {
     my $from = $self->{from};
     my $subject = $self->{subject};
 
-    my ($status, $distversion, $platform) = split /\s+/, $subject;
+    my ($status, $distversion, $platform, $osver) = split /\s+/, $subject;
     return 0  unless $status =~ /^(PASS|FAIL|UNKNOWN|NA)$/i;
 
     $platform ||= "";
@@ -182,9 +183,9 @@ sub parse_report {
 
     my $perl = $self->_extract_perl_version(\$body);
 
-    my ($osname)   = $body =~ /Summary of my perl5.*osname=([^\s\n,<\']+)/s;
-    my ($osvers)   = $body =~ /Summary of my perl5.*osvers=([^\s\n,<\']+)/s;
-    my ($archname) = $body =~ /Summary of my perl5.*archname=([^\s\n&,<\']+)/s;
+    my ($osname)   = $body =~ /(?:Summary of my perl5|Platform:).*?osname=([^\s\n,<\']+)/s;
+    my ($osvers)   = $body =~ /(?:Summary of my perl5|Platform:).*?osvers=([^\s\n,<\']+)/s;
+    my ($archname) = $body =~ /(?:Summary of my perl5|Platform:).*?archname=([^\s\n&,<\']+)/s;
     $archname =~ s/\n.*//	if($archname);
 
     $self->status($status);
@@ -192,8 +193,6 @@ sub parse_report {
     $self->version($version);
     $self->from($from || "");
     $self->perl($perl);
-    $self->osname($osname || "");
-    $self->osvers($osvers || "");
     $self->filename($d->filename);
 
     unless($archname || $platform) {
@@ -201,6 +200,18 @@ sub parse_report {
 	    elsif($osname)		    { $platform = $osname }
     }
 
+    unless($osname) {
+        if($platform && $platform =~ $OSNAMES) {
+            $osname = $1;
+        } elsif($archname && $archname =~ $OSNAMES) {
+            $osname = $1;
+        }
+    }
+
+    $osvers ||= $osver;
+
+    $self->osname($osname || "");
+    $self->osvers($osvers || "");
     $self->archname($archname || $platform);
 
     return 1;
