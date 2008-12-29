@@ -80,7 +80,7 @@ if($options{sql}) {
             print join(",",@$row) . "\n";
         }
     } else {
-        print "Sorry, no results returned\n";
+        print "Sorry, no results returned for SQL [$options{sql}]\n";
     }
 } else {
     my $sql = "SELECT * FROM cpanstats WHERE ";
@@ -103,13 +103,14 @@ if($options{sql}) {
     push @where, "perl=''"                                  if(defined $options{perl} && $options{perl} eq '-');
 
     if(@where) {
-        my @rows = $dbi->get_query('array',$sql . join(' AND ',@where));
+        $sql .= join(' AND ',@where);
+        my @rows = $dbi->get_query('array',$sql);
         if(@rows) {
             for my $row (@rows) {
                 print join(",",@$row) . "\n";
             }
         } else {
-            print "Sorry, no results returned\n";
+            print "Sorry, no results returned for SQL [$sql]\n";
         }
     } else {
         print "No SQL arguments given\n";

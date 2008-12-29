@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.22';
+my $VERSION = '0.23';
 
 #----------------------------------------------------------------------------
 
@@ -436,16 +436,18 @@ sub help {
 
     if($full) {
         print <<HERE;
-
 Usage: $0 \\
      --config=<file> --database=<dbcode>        \\
+     --log=<file> --out=<file>                  \\
      [-c] [-m] [-v] [-s]                        \\
      [--file=<file>] [--start=n] [--end=n]      \\
-     [--log=<file>] [-out=<file>] [-h] [-V]     \\
+      [-h] [-V]     \\
      [--localonly] [--progress]
 
   --config=<file>       - configuration file
   --database=<dbcode>   - CPANSTATS or LITESTATS
+  --log                 - log file for shortcut reference for -m and -c
+  --out                 - results output file
 
   -m                    - check for missing entries
   -c                    - check existing entries for bad parsing
@@ -454,8 +456,6 @@ Usage: $0 \\
   --file                - file of IDs to reference
   --start               - start id for -m or -c
   --end                 - end id for -m or -c
-  --log                 - log file for shortcut reference for -m and -c
-  --out                 - results output file
 
   --localonly           - no NNTP lookups, use local logs only
   --progress            - print progress messages to STDOUT

@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.32';
+$VERSION = '0.33';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -264,8 +264,12 @@ sub insert_stats {
 
     my $INSERT = 'INSERT INTO cpanstats VALUES (?,?,?,?,?,?,?,?,?,?,?)';
 
-    $self->{CPANSTATS}->do_query($INSERT,@fields);
-    $self->{LITESTATS}->do_query($INSERT,@fields);
+    for my $db (qw(CPANSTATS LITESTATS)) {
+        my @rows = $self->{$db}->get_query('array','SELECT * FROM cpanstats WHERE id=?',$fields[0]);
+        next    if(@rows);
+        $self->{$db}->do_query($INSERT,@fields);
+    }
+
     if((++$self->{stat_count} % 50) == 0) {
         $self->{CPANSTATS}->do_commit;
         $self->{LITESTATS}->do_commit;
@@ -281,7 +285,12 @@ sub insert_article {
 
     my $INSERT = 'INSERT INTO articles VALUES (?,?)';
 
-    $self->{LITEARTS}->do_query($INSERT,@fields);
+    for my $db (qw(LITEARTS)) {
+        my @rows = $self->{$db}->get_query('array','SELECT * FROM articles WHERE id=?',$fields[0]);
+        next    if(@rows);
+        $self->{$db}->do_query($INSERT,@fields);
+    }
+
     if((++$self->{arts_count} % 50) == 0) {
         $self->{LITEARTS}->do_commit;
     }

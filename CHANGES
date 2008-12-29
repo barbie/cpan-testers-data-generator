@@ -1,5 +1,9 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.33    29/12/2008
+	- updated help text to bin/cpanstats-verify  (v0.23)
+	- fix to stop existing records being reinserted.
+
 0.32    19/12/2008
         - added progress option to bin/cpanstats-verify (v0.22)
         - fixes to Article.pm to attempt to correct missing osnames and osvers.
@@ -7,7 +11,6 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
           sometime:
             bin/articles-verify   (v0.02)
             bin/articles-view     (v0.02)
-
 0.31    18/12/2008
         - name change to fit below the CPAN::Testers namespace.
         - added epoch to date extraction from article.
