@@ -1,6 +1,6 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
-0.34    current
+0.34    12/01/2009
         - updated Copyright info, minor fixes and added 'Getopt::ArgvFile', if
 	  not already used:
             bin/articles-verify   (v0.03)
