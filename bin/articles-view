@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.02';
+my $VERSION = '0.03';
 
 #----------------------------------------------------------------------------
 
@@ -12,11 +12,11 @@ articles-view - script to view an article from the articles database.
 
 =head1 SYNOPSIS
 
-  perl articles-verify --config=<file> [--ids=0,0,0]
+  perl articles-view --config=<file> --ids=0,0,0
 
 =head1 DESCRIPTION
 
-Reads name artcoles from the articles database.
+Reads named articles from the articles database.
 
 =head1 OPTIONS
 
@@ -56,29 +56,11 @@ use constant    NNTPSTART   => 0;
 # -------------------------------------
 # Program
 
-##### INITIALISE #####
-
 init_options();
-
-$options{ids}   or die "No ids given\n";
-
-##### MAIN #####
-
 view_articles();
 
 # -------------------------------------
 # Subroutines
-
-=item get_lastid
-
-Returns the last NNTP id recorded in the database.
-
-=cut
-
-sub get_lastid {
-    my @rows = $dbi->get_query('array',"SELECT MAX(id) FROM articles");
-    return $rows[0]->[0];
-}
 
 =item view_articles
 
@@ -112,8 +94,9 @@ sub init_options {
     help(1) if($options{help});
     help(0) if($options{version});
 
-    help(1,"Must specify the configuration file")              unless($options{config});
+    help(1,"Must specify the configuration file")               unless($options{config});
     help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
+    help(1,"No ids given")                                      unless($options{ids});
 
     # load configuration
     my $cfg = Config::IniFiles->new( -file => $options{config} );
@@ -183,7 +166,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+  Copyright (C) 2005-2009 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.

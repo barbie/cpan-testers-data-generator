@@ -13,6 +13,7 @@ bin/cpanstats-update
 bin/cpanstats-verify
 examples/cpanstats-createdb
 examples/cpanstats-convert
+examples/cpanstats-verify.sh
 examples/generate.sh
 examples/settings-example.ini
 lib/CPAN/Testers/Data/Generator.pm

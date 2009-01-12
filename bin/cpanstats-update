@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.07';
+my $VERSION = '0.08';
 
 #----------------------------------------------------------------------------
 
@@ -68,6 +68,7 @@ Note that the second entry will update multiple columns
 
 use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
+use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 use IO::File;
 
@@ -228,7 +229,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+  Copyright (C) 2005-2009 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.

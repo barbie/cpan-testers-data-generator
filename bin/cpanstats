@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 
-my $VERSION = '0.05';
+my $VERSION = '0.06';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -28,6 +28,7 @@ my $t = CPAN::Testers::Data::Generator->new(
     ignore      => $options{ignore},
     nostore     => $options{nostore},
     config      => $options{config},
+    logfile     => $options{log},
 );
 
 if($options{rebuild})   { $t->rebuild($options{start},$options{end}); }
@@ -42,6 +43,7 @@ sub init_options {
         'config|c=s',
         'ignore|i',
         'nostore|n',
+        'log|l=s',
 
         'rebuild|r',
         'start=i',
@@ -61,9 +63,12 @@ sub _help {
     if($full) {
         print <<HERE;
 
-Usage: $0 [-c file] [-r [--start=n] [--end=n]] [-i] [-n] [-h] [-v]
+Usage: $0 \
+         [-c=<file>] [-r [--start=n] [--end=n]] [-log=<file>] \
+         [-i] [-n] [-h] [-v]
 
-  -c file        configuration file
+  -c=<file>      configuration file
+  -l=<file>      output log file
   -r             rebuild cpanstats from articles
   --start        start id to rebuild
   --end          end id to rebuild
@@ -133,7 +138,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+  Copyright (C) 2005-2009 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.

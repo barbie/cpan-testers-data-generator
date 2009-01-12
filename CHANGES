@@ -1,5 +1,20 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.34    current
+        - updated Copyright info, minor fixes and added 'Getopt::ArgvFile', if
+	  not already used:
+            bin/articles-verify   (v0.03)
+            bin/articles-view     (v0.03)
+            bin/cpanstats         (v0.06)
+            bin/cpanstats-delete  (v0.13)
+            bin/cpanstats-reparse (v0.09)
+            bin/cpanstats-select  (v0.10)
+            bin/cpanstats-update  (v0.08)
+            bin/cpanstats-verify  (v0.24)
+	- added cpanstats-verify.sh to examples.
+        - added missing log file command line option to bin/cpanstats (v0.06).
+	- added missing prerequisites (thanks to CPANTS)
+
 0.33    29/12/2008
 	- updated help text to bin/cpanstats-verify  (v0.23)
 	- fix to stop existing records being reinserted.
@@ -11,6 +26,7 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
           sometime:
             bin/articles-verify   (v0.02)
             bin/articles-view     (v0.02)
+
 0.31    18/12/2008
         - name change to fit below the CPAN::Testers namespace.
         - added epoch to date extraction from article.

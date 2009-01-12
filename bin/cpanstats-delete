@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.12';
+my $VERSION = '0.13';
 
 #----------------------------------------------------------------------------
 
@@ -49,6 +49,7 @@ Named file used when deleting a list of NNTP ids.
 
 use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
+use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 use IO::File;
 
@@ -198,7 +199,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2008 Barbie for Miss Barbell Productions.
+  Copyright (C) 2005-2009 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or 
   modify it under the same terms as Perl itself.
