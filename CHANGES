@@ -1,5 +1,10 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.35    29/01/2009
+	- updated patterns when extracting perl version (Article.pm).
+	- updated patterns when extracting osname (Article.pm).
+	- updated cannot connect to NNTP server error message.
+
 0.34    12/01/2009
         - updated Copyright info, minor fixes and added 'Getopt::ArgvFile', if
 	  not already used:

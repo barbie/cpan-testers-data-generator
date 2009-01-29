@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.34';
+$VERSION = '0.35';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -187,7 +187,7 @@ sub nntp_connect {
     my $self = shift;
 
     # connect to NNTP server
-    my $nntp = Net::NNTP->new("nntp.perl.org") or die "Cannot connect to nntp.perl.org";
+    my $nntp = Net::NNTP->new("nntp.perl.org") or die "Cannot connect to NNTP server [nntp.perl.org]\n";
     ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last}) = $nntp->group("perl.cpan.testers");
 
     return $nntp;

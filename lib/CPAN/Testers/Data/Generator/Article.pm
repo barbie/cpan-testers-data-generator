@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.34';
+$VERSION = '0.35';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -37,7 +37,15 @@ my %regexes = (
     6 => { re => qr/(\w+)?\s+(\d+),?\s+(\d+)/,          f => [qw(month day year)] },  # September 22, 1999 06:29
 );
 
-my $OSNAMES = qr/(cygwin|freebsd|netbsd|openbsd|darwin|linux|cygwin|darwin|MSWin32|dragonfly|solaris|MacOS|irix)/i;
+my $OSNAMES = qr/(cygwin|freebsd|netbsd|openbsd|darwin|linux|cygwin|darwin|MSWin32|dragonfly|solaris|MacOS|irix|mirbsd|gnu|bsdos|aix|sco|os2)/i;
+my %OSNAMES = (
+    'MacPPC'    => 'macos',
+    'osf'       => 'dec_osf',
+    'pa-risc'   => 'hpux',
+    's390'      => 'os390',
+    'VMS_'      => 'vms',
+    'ARCHREV_0' => 'hpux',
+);
 
 #----------------------------------------------------------------------------
 # The Application Programming Interface
@@ -201,10 +209,19 @@ sub parse_report {
     }
 
     unless($osname) {
-        if($platform && $platform =~ $OSNAMES) {
-            $osname = $1;
-        } elsif($archname && $archname =~ $OSNAMES) {
-            $osname = $1;
+        for my $text ($platform, $archname) {
+            next    unless($text);
+            if($text =~ $OSNAMES) {
+                $osname = $1;
+            } else {
+                for my $rx (keys %OSNAMES) {
+                    if($text =~ /$rx/i) {
+                        $osname = $OSNAMES{$rx};
+                        last;
+                    }
+                }
+            }
+            last    if($osname);
         }
     }
 
@@ -237,22 +254,32 @@ sub _extract_perl_version {
     # Summary of my perl5 (revision 5.0 version 6 subversion 1) configuration:
     # Summary of my perl5 (revision 5 version 10 subversion 0) configuration:
     my ($rev, $ver, $sub, $extra) =
-        $$body =~ /Summary of my (?:perl\d+)? \((?:revision )?(\d+(?:\.\d+)?) (?:version|patchlevel) (\d+) subversion\s+(\d+) ?(.*?)\) configuration/s;
+        $$body =~ /Summary of my (?:perl(?:\d+)?)? \((?:revision )?(\d+(?:\.\d+)?) (?:version|patchlevel) (\d+) subversion\s+(\d+) ?(.*?)\) configuration/si;
 
-    unless(defined $rev) {
-#       warn "Cannot parse perl version for article:\n$body";
-        return 0;
+    if(defined $rev) {
+        my $perl = $rev + ($ver / 1000) + ($sub / 1000000);
+        $rev = int($perl);
+        $ver = int(($perl*1000)%1000);
+        $sub = int(($perl*1000000)%1000);
+
+        my $version = sprintf "%d.%d.%d", $rev, $ver, $sub;
+        $version .= " $extra" if $extra;
+        return $version;
+    #   return sprintf "%0.6f", $perl;	# an alternate format
     }
 
-    my $perl = $rev + ($ver / 1000) + ($sub / 1000000);
-    $rev = int($perl);
-    $ver = int(($perl*1000)%1000);
-    $sub = int(($perl*1000000)%1000);
+    # the following is experimental and may provide incorrect data
 
-    my $version = sprintf "%d.%d.%d", $rev, $ver, $sub;
-    $version .= " $extra" if $extra;
-    return $version;
-#   return sprintf "%0.6f", $perl;	# an alternate format
+    ($rev, $ver, $sub) =
+        $$body =~ m!/(?:(?:site_perl|perl|perl5|\.?cpanplus)/|perl-)(5)\.?([6-9]|1[0-2])\.?(\d+)/!;
+    if(defined $rev) {
+        my $version = sprintf "%d.%d.%d", $rev, $ver, $sub;
+        return $version;
+    }
+
+
+#    warn "Cannot parse perl version for article:\n$body";
+    return 0;
 }
 
 1;
