@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.09';
+my $VERSION = '0.10';
 
 #----------------------------------------------------------------------------
 
@@ -41,8 +41,6 @@ amend the appropriate field to the correct value.
 
 use lib qw(./lib ../lib);
 
-use Cwd;
-use DBI;
 use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 use IO::File;

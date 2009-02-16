@@ -1,5 +1,13 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.36    16/02/2009
+	- clean up of pre-requisites.
+	- CPAN::Testers::Data::Generator::Article abstracted into its own
+	  distribution CPAN-Testers-Common-Article.
+	- fixed scripts due to above:
+            bin/cpanstats         (v0.07)
+            bin/cpanstats-reparse (v0.10)
+
 0.35    29/01/2009
 	- updated patterns when extracting perl version (Article.pm).
 	- updated patterns when extracting osname (Article.pm).

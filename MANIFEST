@@ -17,10 +17,8 @@ examples/cpanstats-verify.sh
 examples/generate.sh
 examples/settings-example.ini
 lib/CPAN/Testers/Data/Generator.pm
-lib/CPAN/Testers/Data/Generator/Article.pm
 t/01base.t
 t/10functions.t
-t/11article.t
 t/12generate.t
 t/90podtest.t
 t/91podcover.t

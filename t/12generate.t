@@ -5,11 +5,11 @@ use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
 use File::Path;
 use IO::File;
-use Test::More tests => 37;
+use Test::More tests => 47;
 
 use CPAN::Testers::Data::Generator;
 
-my ($nomock,$mock1);
+my (%dbh,$nomock,$mock1);
 my $config = './t/test-config.ini';
 
 BEGIN {
@@ -156,6 +156,49 @@ SKIP: {
 }
 
 
+## Test we don't reparse anything that doesn't already exist
+
+SKIP: {
+    skip "Test::MockObject required for testing", 7 if $nomock;
+    #diag "Testing reparse()";
+
+    my $t = CPAN::Testers::Data::Generator->new(
+        config  => $config,
+        logfile => $directory . '/cpanstats.log'
+    );
+
+    # everything should still be there
+    ok(-f $directory . '/cpanstats.db','.. dbs still there');
+    ok(-f $directory . '/cpanstats.log');
+    ok(-f $directory . '/articles.db');
+
+    my $size = -s $directory . '/cpanstats.db';
+
+    my $c1 = getArticleCount();
+    deleteArticle(1);
+    my $c2 = getArticleCount();
+    is($c1-1,$c2,'... removed 1 article');
+
+    # recreate the stats database locally
+    $t->reparse({localonly => 1},1,2);
+    my $c3 = getArticleCount();
+    is($c2,$c3,'... no more or less articles');
+
+    # check stats database is again the same size as before
+    ok(-f $directory . '/cpanstats.db');
+    is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
+
+    # recreate the stats database for specific entries
+    $t->reparse({},0,6,20,100);
+    my $c4 = getArticleCount();
+    is($c2,$c4,'... no more or less articles again');
+
+    # check stats database is again the same size as before
+    ok(-f $directory . '/cpanstats.db');
+    is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
+}
+
+
 ## Test we don't store articles
 
 SKIP: {
@@ -177,7 +220,7 @@ SKIP: {
 
     my $size = -s $directory . '/articles.db';
     my $count = getArticleCount();
-    is($count,4,'.. should be 4 records');
+    is($count,3,'.. should be 3 records');
 
     # update should just reduce articles database
     $t->generate;
@@ -200,49 +243,32 @@ SKIP: {
 rmtree($directory);
 
 
-sub getArticle {
-    my ($self,$id) = @_;
-    my @text;
+#----------------------------------------------------------------------------
+# Test Functions
 
-    my $fh = IO::File->new($articles{$id}) or return \@text;
-    while(<$fh>) { push @text, $_ }
-    $fh->close;
+sub config_db {
+    my $db = shift;
 
-    return \@text;
-}
-
-sub group {
-    return(4,1,4);
-}
-
-sub getArticleCount {
+    # load config file
     my $cfg = Config::IniFiles->new( -file => $config );
-    my $db = 'LITEARTS';
-    my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
-    my $dbi = CPAN::Testers::Common::DBUtils->new(%opts);
-    die "Cannot configure $db database\n" unless($dbi);
 
-    my @rows = $dbi->get_query('array','SELECT count(id) FROM articles');
-    return 0	unless(@rows);
-    return $rows[0]->[0] || 0;
+    # configure databases
+    die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
+    my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+    my $dbh = CPAN::Testers::Common::DBUtils->new(%opts);
+    die "Cannot configure $db database\n" unless($dbh);
+
+    return $dbh;
 }
 
 sub create_db {
     my $type = shift;
     my (@sql,%options);
 
-    # load configuration
-    my $cfg = Config::IniFiles->new( -file => $config );
-
-    # configure databases
-    for my $db (qw(CPANSTATS LITESTATS LITEARTS)) {
-        die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
-        my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
-        $options{$db} = CPAN::Testers::Common::DBUtils->new(%opts);
-        die "Cannot configure $db database\n" unless($options{$db});
-    }
-
     if($type < 3) {
+        $options{LITESTATS} = config_db('LITESTATS');
+        $options{CPANSTATS} = config_db('CPANSTATS');
+
         push @sql,
             'PRAGMA auto_vacuum = 1',
             'CREATE TABLE cpanstats (
@@ -267,6 +293,8 @@ sub create_db {
     }
 
     if($type > 1) {
+        $options{LITEARTS} = config_db('LITEARTS');
+
         @sql = ();
         push @sql,
             'PRAGMA auto_vacuum = 1',
@@ -275,4 +303,35 @@ sub create_db {
                         article       TEXT)';
         $options{LITEARTS}->do_query($_)  for(@sql);
     }
+}
+
+sub group {
+    return(4,1,4);
+}
+
+sub getArticle {
+    my ($self,$id) = @_;
+    my @text;
+
+    my $fh = IO::File->new($articles{$id}) or return \@text;
+    while(<$fh>) { push @text, $_ }
+    $fh->close;
+
+    return \@text;
+}
+
+sub getArticleCount {
+    my $dbh = config_db('LITEARTS');
+
+    my @rows = $dbh->get_query('array','SELECT count(id) FROM articles');
+    return 0	unless(@rows);
+    return $rows[0]->[0] || 0;
+}
+
+sub deleteArticle {
+    my $id = shift;
+
+    my $dbh = config_db('LITEARTS');
+    my @rows = $dbh->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
+    $dbh->do_query('DELETE FROM articles WHERE id = ?',$id)    if(@rows);
 }

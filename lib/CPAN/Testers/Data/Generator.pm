@@ -4,19 +4,18 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.35';
+$VERSION = '0.36';
 
 #----------------------------------------------------------------------------
 # Library Modules
 
 use Config::IniFiles;
+use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
 use File::Basename;
 use File::Path;
 use IO::File;
 use Net::NNTP;
-
-use CPAN::Testers::Data::Generator::Article;
 
 #----------------------------------------------------------------------------
 # The Application Programming Interface
@@ -195,7 +194,7 @@ sub nntp_connect {
 
 sub parse_article {
     my ($self,$id,$article,$options) = @_;
-    my $object = CPAN::Testers::Data::Generator::Article->new($article);
+    my $object = CPAN::Testers::Common::Article->new($article);
 
     unless($object) {
         $self->_log(" ... bad parse\n");
