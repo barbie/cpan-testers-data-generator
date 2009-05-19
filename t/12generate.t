@@ -159,7 +159,7 @@ SKIP: {
 ## Test we don't reparse anything that doesn't already exist
 
 SKIP: {
-    skip "Test::MockObject required for testing", 7 if $nomock;
+    skip "Test::MockObject required for testing", 10 if $nomock;
     #diag "Testing reparse()";
 
     my $t = CPAN::Testers::Data::Generator->new(
@@ -254,7 +254,7 @@ sub config_db {
 
     # configure databases
     die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
-    my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+    my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
     my $dbh = CPAN::Testers::Common::DBUtils->new(%opts);
     die "Cannot configure $db database\n" unless($dbh);
 

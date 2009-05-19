@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.36';
+$VERSION = '0.37';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -33,7 +33,7 @@ sub new {
     # configure databases
     for my $db (qw(CPANSTATS LITESTATS LITEARTS)) {
         die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
-        my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+        my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
         $opts{AutoCommit} = 0;
         $self->{$db} = CPAN::Testers::Common::DBUtils->new(%opts);
         die "Cannot configure $db database\n" unless($self->{$db});
@@ -269,6 +269,12 @@ sub insert_stats {
         $self->{$db}->do_query($INSERT,@fields);
     }
 
+    # push page requests
+    # - note we only update the author if this is the *latest* version of the distribution
+    my $author = $fields[2] eq 'cpan' ? $fields[3] : $self->_get_author($fields[4],$fields[5]);
+    $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
+    $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[4]);
+
     if((++$self->{stat_count} % 50) == 0) {
         $self->{CPANSTATS}->do_commit;
         $self->{LITESTATS}->do_commit;
@@ -297,6 +303,12 @@ sub insert_article {
 
 #----------------------------------------------------------------------------
 # Private Functions
+
+sub _get_author {
+    my ($self,$dist,$version) = @_;
+    my @rows = $self->{CPANSTATS}->get_query('array','SELECT author FROM ixlatest dist=? AND version=? LIMIT 1',$dist,$version);
+    return @rows ? $rows[0]->[0] : '';
+}
 
 sub _valid_field {
     my ($self,$id,$name,$value) = @_;

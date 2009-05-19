@@ -1,5 +1,8 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.37    current
+	- added page request functionality.
+
 0.36    16/02/2009
 	- clean up of pre-requisites.
 	- CPAN::Testers::Data::Generator::Article abstracted into its own
