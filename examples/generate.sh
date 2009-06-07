@@ -6,6 +6,9 @@ date
 mkdir -p $BASE/logs
 
 cd $BASE
-perl bin/cpanstats.pl >>logs/cpanstats.out 2>&1
+perl bin/cpanstats \
+    --config=data/settings.ini     \
+    --log=../db/logs/cpanstats.log \
+    >>logs/cpanstats.out
 perl bin/readstats.pl -c -m >logs/readstats.out
 

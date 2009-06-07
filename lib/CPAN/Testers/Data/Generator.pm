@@ -271,9 +271,25 @@ sub insert_stats {
 
     # push page requests
     # - note we only update the author if this is the *latest* version of the distribution
-    my $author = $fields[2] eq 'cpan' ? $fields[3] : $self->_get_author($fields[4],$fields[5]);
+    my $author = $fields[1] eq 'cpan' ? $fields[3] : $self->_get_author($fields[4],$fields[5]);
     $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
     $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[4]);
+
+    if($fields[1] ne 'cpan') {
+        $self->{CPANSTATS}->do_query('INSERT INTO release_summary (dist,version,id,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            $fields[4],$fields[5],$fields[0],
+
+            $self->_oncpan($fields[4],$fields[5]) ? 1 : 2,
+
+            $fields[5] =~ /_/           ? 2 : 1,
+            $fields[7] =~ /^5.(7|9|11)/ ? 2 : 1,
+            $fields[7] =~ /patch/       ? 2 : 1,
+
+            $fields[1] eq 'pass'    ? 1 : 0,
+            $fields[1] eq 'fail'    ? 1 : 0,
+            $fields[1] eq 'na'      ? 1 : 0,
+            $fields[1] eq 'unknown' ? 1 : 0);
+    }
 
     if((++$self->{stat_count} % 50) == 0) {
         $self->{CPANSTATS}->do_commit;
@@ -306,7 +322,7 @@ sub insert_article {
 
 sub _get_author {
     my ($self,$dist,$version) = @_;
-    my @rows = $self->{CPANSTATS}->get_query('array','SELECT author FROM ixlatest dist=? AND version=? LIMIT 1',$dist,$version);
+    my @rows = $self->{CPANSTATS}->get_query('array','SELECT author FROM ixlatest WHERE dist=? AND version=? LIMIT 1',$dist,$version);
     return @rows ? $rows[0]->[0] : '';
 }
 
@@ -323,6 +339,17 @@ sub _get_lastid {
     my @rows = $self->{LITEARTS}->get_query('array',"SELECT max(id) FROM articles");
     return 0    unless(@rows);
     return $rows[0]->[0] || 0;
+}
+
+sub _oncpan {
+    my ($self,$dist,$vers) = @_;
+
+    my @rows = $self->{CPANSTATS}->get_query('array','SELECT DISTINCT(type) FROM uploads WHERE dist=? AND version=?',$dist,$vers);
+    my $type = @rows ? $rows[0]->[0] : undef;
+
+    return 1    unless($type);          # assume it's a new release
+    return 0    if($type eq 'backpan'); # on backpan only
+    return 1;                           # on cpan or new upload
 }
 
 sub _log {

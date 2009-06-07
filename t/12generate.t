@@ -5,11 +5,33 @@ use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
 use File::Path;
 use IO::File;
-use Test::More tests => 47;
+use Test::More;
+
+use Data::Dumper;
 
 use CPAN::Testers::Data::Generator;
 
-my (%dbh,$nomock,$mock1);
+# do we the necessary Test modules?
+
+eval "use Test::Database";
+if($@) {
+    plan skip_all => 'Need Test::Database to do full tests';
+}
+
+eval "use Test::MockObject";
+if($@) {
+    plan skip_all => 'Need Test::MockObject to do full tests';
+}
+
+if(create_db(0)) {
+    plan skip_all => 'Cannot create temporary databases';
+} else {
+    plan tests => 49;
+}
+
+# continue with testing
+
+my (%options,$nomock,$mock1);
 my $config = './t/test-config.ini';
 
 BEGIN {
@@ -51,7 +73,7 @@ ok(-f $directory . '/articles.db');
 ## Test we can generate
 
 SKIP: {
-    skip "Test::MockObject required for testing", 5 if $nomock;
+    skip "Test::MockObject required for testing", 7 if $nomock;
     #diag "Testing generate()";
 
     my $t = CPAN::Testers::Data::Generator->new(
@@ -77,8 +99,10 @@ SKIP: {
     $t->generate;
 
     is(-s $directory . '/articles.db', $size,'.. db should not change size');
-}
 
+    is(countRequests(),4,'.. page requests added');
+    is(countReleases(),2,'.. release summaries added');
+}
 
 ## Test we can rebuild
 
@@ -247,6 +271,13 @@ rmtree($directory);
 # Test Functions
 
 sub config_db {
+    # Unfortunately Test::Database is not stable enough to use,
+    # so this test script cannot be used to reliably test this 
+    # distribution. As soon as Test::Database does become stable
+    # further work to complete testing will be done.
+
+    return;
+
     my $db = shift;
 
     # load config file
@@ -255,6 +286,16 @@ sub config_db {
     # configure databases
     die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
     my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+    unlink $opts{database}  if($opts{driver} eq 'SQLite' && -f $opts{database});
+
+    my $dsn;
+    ( $dsn, $opts{dbuser}, $opts{dbpass} ) = Test::Database->connection_info( $opts{driver} => $opts{database} );
+    ( $opts{driver}, $opts{database} ) = split(':',$dsn);
+
+    diag(Dumper(\%opts));
+
+    # need to store new configuration details here
+
     my $dbh = CPAN::Testers::Common::DBUtils->new(%opts);
     die "Cannot configure $db database\n" unless($dbh);
 
@@ -262,38 +303,95 @@ sub config_db {
 }
 
 sub create_db {
-    my $type = shift;
-    my (@sql,%options);
+    my $type = shift || 0;
 
-    if($type < 3) {
-        $options{LITESTATS} = config_db('LITESTATS');
-        $options{CPANSTATS} = config_db('CPANSTATS');
+    if($type == 0) {
+        $options{CPANSTATS} = config_db('CPANSTATS')    or return 1;
+        $options{LITESTATS} = config_db('LITESTATS')    or return 1;
+        $options{LITEARTS}  = config_db('LITEARTS')     or return 1;
 
-        push @sql,
+        push my @sql,
             'PRAGMA auto_vacuum = 1',
             'CREATE TABLE cpanstats (
-                        id            INTEGER PRIMARY KEY,
-                        state         TEXT,
-                        postdate      TEXT,
-                        tester        TEXT,
-                        dist          TEXT,
-                        version       TEXT,
-                        platform      TEXT,
-                        perl          TEXT,
-                        osname        TEXT,
-                        osvers        TEXT,
-                        date          TEXT)',
+                id          INTEGER PRIMARY KEY,
+                state       TEXT,
+                postdate    TEXT,
+                tester      TEXT,
+                dist        TEXT,
+                version     TEXT,
+                platform    TEXT,
+                perl        TEXT,
+                osname      TEXT,
+                osvers      TEXT,
+                date        TEXT)',
 
             'CREATE INDEX distverstate ON cpanstats (dist, version, state)',
             'CREATE INDEX ixperl ON cpanstats (perl)',
             'CREATE INDEX ixplat ON cpanstats (platform)',
-            'CREATE INDEX ixdate ON cpanstats (postdate)';
-        $options{LITESTATS}->do_query($_)  for(@sql);
-        $options{CPANSTATS}->do_query($_)  for(@sql);
-    }
+            'CREATE INDEX ixdate ON cpanstats (postdate)'
+            ;
+        dosql('LITESTATS',\@sql) or return 1;
 
-    if($type > 1) {
-        $options{LITEARTS} = config_db('LITEARTS');
+        @sql = ();
+        push @sql,
+            'DROP TABLE IF EXISTS cpanstats',
+            'CREATE TABLE cpanstats (
+                 id         int(10) unsigned NOT NULL,
+                 state      varchar(32),
+                 postdate   varchar(8),
+                 tester     varchar(255),
+                 dist       varchar(255),
+                 version    varchar(255),
+                 platform   varchar(255),
+                 perl       varchar(255),
+                 osname     varchar(255),
+                 osvers     varchar(255),
+                 fulldate   varchar(32),
+                 PRIMARY KEY (id))',
+
+            'DROP TABLE IF EXISTS page_requests',
+            'CREATE TABLE page_requests (
+                type        varchar(8)   NOT NULL,
+                name        varchar(255) NOT NULL,
+                weight      int(2) unsigned NOT NULL
+            )',
+
+            'DROP TABLE IF EXISTS release_summary',
+            'CREATE TABLE release_summary (
+                dist        varchar(255) NOT NULL,
+                version     varchar(255) NOT NULL,
+                id          int(10) unsigned NOT NULL,
+                oncpan      tinyint(4) default 0,
+                distmat     tinyint(4) default 0,
+                perlmat     tinyint(4) default 0,
+                patched     tinyint(4) default 0,
+                pass        int(10)    default 0,
+                fail        int(10)    default 0,
+                na          int(10)    default 0,
+                unknown     int(10)    default 0
+            )',
+
+            'DROP TABLE IF EXISTS uploads',
+            'CREATE TABLE uploads (
+                type        varchar(10)  NOT NULL,
+                author      varchar(32)  NOT NULL,
+                dist        varchar(100) NOT NULL,
+                version     varchar(100) NOT NULL,
+                filename    varchar(255) NOT NULL,
+                released    int(16)	     NOT NULL,
+                PRIMARY KEY (author,dist,version)
+            )',
+
+            'DROP TABLE IF EXISTS ixlatest',
+            'CREATE TABLE ixlatest (
+                dist        varchar(100) NOT NULL,
+                version     varchar(100) NOT NULL,
+                released    int(16)		 NOT NULL,
+                author      varchar(32)  NOT NULL,
+                PRIMARY KEY (dist)
+            )'
+            ;
+        dosql('CPANSTATS',\@sql) or return 1;
 
         @sql = ();
         push @sql,
@@ -301,8 +399,44 @@ sub create_db {
             'CREATE TABLE articles (
                         id            INTEGER PRIMARY KEY,
                         article       TEXT)';
-        $options{LITEARTS}->do_query($_)  for(@sql);
+        return dosql('LITEARTS',\@sql);
     }
+    
+    if($type < 3) {
+        push my @sql,
+            'DELETE FROM cpanstats';
+        dosql('LITESTATS',\@sql) or return 1;
+
+        push @sql,
+            'DELETE FROM page_requests',
+            'DELETE FROM release_summary',
+            'DELETE FROM uploads',
+            'DELETE FROM ixlatest',
+            ;
+        dosql('CPANSTATS',\@sql) or return 1;
+    }
+
+    if($type > 1) {
+        push my @sql,
+            'DELETE FROM articles';
+        dosql('LITEARTS',\@sql) or return 1;
+    }
+
+    return 0;
+}
+
+sub dosql {
+    my ($db,$sql) = @_;
+
+    for(@$sql) {
+        eval { $options{$db}->do_query($_); };
+        if($@) {
+            diag $@;
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 sub group {
@@ -321,9 +455,9 @@ sub getArticle {
 }
 
 sub getArticleCount {
-    my $dbh = config_db('LITEARTS');
+    $options{LITEARTS} ||= config_db('LITEARTS');
 
-    my @rows = $dbh->get_query('array','SELECT count(id) FROM articles');
+    my @rows = $options{LITEARTS}->get_query('array','SELECT count(id) FROM articles');
     return 0	unless(@rows);
     return $rows[0]->[0] || 0;
 }
@@ -331,7 +465,21 @@ sub getArticleCount {
 sub deleteArticle {
     my $id = shift;
 
-    my $dbh = config_db('LITEARTS');
-    my @rows = $dbh->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
-    $dbh->do_query('DELETE FROM articles WHERE id = ?',$id)    if(@rows);
+    $options{LITEARTS} = config_db('LITEARTS');
+    my @rows = $options{LITEARTS}->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
+    $options{LITEARTS}->do_query('DELETE FROM articles WHERE id = ?',$id)    if(@rows);
+}
+
+sub countRequests {
+    $options{CPANSTATS} = config_db('CPANSTATS');
+    my @rows = $options{CPANSTATS}->get_query('array','SELECT * FROM page_requests');
+#    diag(Dumper($_))    for(@rows);
+    return scalar(@rows);
+}
+
+sub countReleases {
+    $options{CPANSTATS} = config_db('CPANSTATS');
+    my @rows = $options{CPANSTATS}->get_query('array','SELECT * FROM release_summary');
+#    diag(Dumper($_))    for(@rows);
+    return scalar(@rows);
 }

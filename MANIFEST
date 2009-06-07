@@ -23,6 +23,7 @@ t/12generate.t
 t/90podtest.t
 t/91podcover.t
 t/94metatest.t
+t/95changedate.t
 t/nntp/126015.txt
 t/nntp/125106.txt
 t/nntp/1804993.txt

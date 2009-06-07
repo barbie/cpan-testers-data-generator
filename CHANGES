@@ -1,7 +1,12 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
-0.37    current
+0.37    07/06/2009
 	- added page request functionality.
+	- added release summary functionality.
+	- due to the recent expansion, the 12generate.t test script now needs
+	  more complex logic. The intention is to use Test::Database for this,
+	  but unfortunately T::D isn't stable enough to use yet. As such this
+	  test script is now effectively disabled.
 
 0.36    16/02/2009
 	- clean up of pre-requisites.
