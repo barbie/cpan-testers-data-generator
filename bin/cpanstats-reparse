@@ -31,7 +31,7 @@ local articles.db database is used to reparse, no NNTP lookup is used.
 The ability to ignore field checking for specific fields is enabled via the
 use of the exclude option. Using a comma separated list you may enter one
 or more of the fields 'dist', 'version', 'from', 'perl' and 'platform'.
-This is useful for parsing a faulty report and then using upstats.pl to
+This is useful for parsing a faulty report and then using cpanstats-update to
 amend the appropriate field to the correct value.
 
 =cut

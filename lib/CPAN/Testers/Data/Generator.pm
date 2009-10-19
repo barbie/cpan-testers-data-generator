@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.37';
+$VERSION = '0.38';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -43,6 +43,13 @@ sub new {
     for my $key (qw(ignore nostore logfile)) {
         $self->{$key} = $hash{$key} || $cfg->val('MAIN',$key);
     }
+
+    my @rows = $self->{CPANSTATS}->get_query('array',q{SELECT osname,ostitle FROM osname});
+    for my $row (@rows) {
+        $self->{OSNAMES}{lc $row->[0]} = $row->[1];
+    }
+
+    ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last}) = (0,0,0);
 
     return $self;
 }
@@ -131,7 +138,7 @@ sub reparse {
 
     for my $id (@ids) {
         #print STDERR "id=[$id], last=[$last]\n";
-        next    if($id < 1 || $id > $last);
+        next    if($id < 1 || ($id > $last && $id > $self->{nntp_last}));
 
         my $article;
         my @rows = $self->{LITEARTS}->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
@@ -189,6 +196,8 @@ sub nntp_connect {
     my $nntp = Net::NNTP->new("nntp.perl.org") or die "Cannot connect to NNTP server [nntp.perl.org]\n";
     ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last}) = $nntp->group("perl.cpan.testers");
 
+    #print STDERR "NNTP: (num,first,last) = ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last})\n";
+
     return $nntp;
 }
 
@@ -232,7 +241,7 @@ sub parse_article {
             $from      = $object->from;
             $perl      = $object->perl;
             $platform  = $object->archname;
-            $osname    = $object->osname;
+            $osname    = $self->_osname($object->osname);
             $osvers    = $object->osvers;
 
             $from      =~ s/'/''/g; #'
@@ -350,6 +359,16 @@ sub _oncpan {
     return 1    unless($type);          # assume it's a new release
     return 0    if($type eq 'backpan'); # on backpan only
     return 1;                           # on cpan or new upload
+}
+
+sub _osname {
+    my ($self,$name) = @_;
+    my $lname = lc $name;
+    unless($self->{OSNAME}{$lname}) {
+        $self->{OSNAMES}{$lname} = uc($name);
+        $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$self->{OSNAMES}{$lname}'});
+    }
+    return $name;
 }
 
 sub _log {

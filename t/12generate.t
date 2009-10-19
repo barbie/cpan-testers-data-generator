@@ -26,7 +26,7 @@ if($@) {
 if(create_db(0)) {
     plan skip_all => 'Cannot create temporary databases';
 } else {
-    plan tests => 49;
+    plan tests => 50;
 }
 
 # continue with testing
@@ -80,6 +80,8 @@ SKIP: {
         config  => $config,
         logfile => $directory . '/cpanstats.log'
     );
+
+    isa_ok($t,'CPAN::Testers::Data::Generator');
 
     # nothing should be created yet
     ok(!-f $directory . '/cpanstats.log');
@@ -276,6 +278,9 @@ sub config_db {
     # distribution. As soon as Test::Database does become stable
     # further work to complete testing will be done.
 
+    # last Test-Database install attempt was version 1.07, which still doesn't 
+    # pass its own tests on my linux distros :(
+
     return;
 
     my $db = shift;
@@ -389,6 +394,14 @@ sub create_db {
                 released    int(16)		 NOT NULL,
                 author      varchar(32)  NOT NULL,
                 PRIMARY KEY (dist)
+            )',
+
+            'DROP TABLE IF EXISTS osname',
+            'CREATE TABLE osname (
+                id          int(10) unsigned NOT NULL auto_increment,
+                osname      varchar(255) NOT NULL,
+                ostitle     varchar(255) NOT NULL,
+                PRIMARY KEY (id)
             )'
             ;
         dosql('CPANSTATS',\@sql) or return 1;
