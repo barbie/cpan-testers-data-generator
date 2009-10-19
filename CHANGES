@@ -2,6 +2,7 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
 
 0.38    19/10/2009
 	- added functionality to update the osname table.
+	- added cpanstats DB schema to examples directory.
 
 0.37    07/06/2009
 	- added page request functionality.
