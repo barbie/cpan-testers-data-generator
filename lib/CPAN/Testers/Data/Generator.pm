@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.38';
+$VERSION = '0.39';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -12,6 +12,7 @@ $VERSION = '0.38';
 use Config::IniFiles;
 use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
+use CPAN::Testers::Common::Utils    qw(nntp_to_guid);
 use File::Basename;
 use File::Path;
 use IO::File;
@@ -47,6 +48,11 @@ sub new {
     my @rows = $self->{CPANSTATS}->get_query('array',q{SELECT osname,ostitle FROM osname});
     for my $row (@rows) {
         $self->{OSNAMES}{lc $row->[0]} = $row->[1];
+    }
+
+    if($cfg->SectionExists('DISABLE')) {
+        my @values = $cfg->val('DISABLE','LIST');
+        $self->{DISABLE}{$_} = 1    for(@values);
     }
 
     ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last}) = (0,0,0);
@@ -221,7 +227,7 @@ sub parse_article {
     }
 
     my $state = lc $1;
-    my ($post,$date,$dist,$version,$platform,$perl,$osname,$osvers) = ();
+    my ($dist,$version,$platform,$perl,$osname,$osvers);
 
     if($state eq 'cpan') {
         if($object->parse_upload()) {
@@ -247,6 +253,10 @@ sub parse_article {
             $from      =~ s/'/''/g; #'
         }
 
+        if($self->{DISABLE} && $self->{DISABLE}{$from}) {
+            $state .= ':invalid';
+        }
+
         return  unless($self->_valid_field($id, 'dist'     => $dist)        || ($options && $options->{exclude}{dist}));
         return  unless($self->_valid_field($id, 'version'  => $version)     || ($options && $options->{exclude}{version}));
         return  unless($self->_valid_field($id, 'from'     => $from)        || ($options && $options->{exclude}{from}));
@@ -256,9 +266,10 @@ sub parse_article {
         return  unless($self->_valid_field($id, 'osvers'   => $osvers)      || ($options && $options->{exclude}{osname}));
     }
 
-    $post = $object->postdate;
-    $date = $object->date;
-    $self->insert_stats($id,$state,$post,$from,$dist,$version,$platform,$perl,$osname,$osvers,$date)
+    my $guid = nntp_to_guid($id);
+    my $post = $object->postdate;
+    my $date = $object->date;
+    $self->insert_stats($id,$guid,$state,$post,$from,$dist,$version,$platform,$perl,$osname,$osvers,$date)
         unless($options && $options->{check});
 }
 
@@ -267,10 +278,10 @@ sub insert_stats {
 
     my @fields = @_;
     $fields[$_] ||= 0   for(0);
-    $fields[$_] ||= ''  for(1,2,3,4,5,6,8,9,10);
-    $fields[$_] ||= '0' for(7);
+    $fields[$_] ||= ''  for(1,2,3,4,5,6,7,9,10,11);
+    $fields[$_] ||= '0' for(8);
 
-    my $INSERT = 'INSERT INTO cpanstats VALUES (?,?,?,?,?,?,?,?,?,?,?)';
+    my $INSERT = 'INSERT INTO cpanstats VALUES (?,?,?,?,?,?,?,?,?,?,?,?)';
 
     for my $db (qw(CPANSTATS LITESTATS)) {
         my @rows = $self->{$db}->get_query('array','SELECT * FROM cpanstats WHERE id=?',$fields[0]);
@@ -280,24 +291,28 @@ sub insert_stats {
 
     # push page requests
     # - note we only update the author if this is the *latest* version of the distribution
-    my $author = $fields[1] eq 'cpan' ? $fields[3] : $self->_get_author($fields[4],$fields[5]);
+    my $author = $fields[2] eq 'cpan' ? $fields[4] : $self->_get_author($fields[5],$fields[6]);
     $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
-    $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[4]);
+    $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
 
-    if($fields[1] ne 'cpan') {
-        $self->{CPANSTATS}->do_query('INSERT INTO release_summary (dist,version,id,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-            $fields[4],$fields[5],$fields[0],
+    if($fields[2] ne 'cpan') {
+        $self->{CPANSTATS}->do_query(
+                'INSERT INTO release_data ' . 
+                '(dist,version,id,guid,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) ' .
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?)',
 
-            $self->_oncpan($fields[4],$fields[5]) ? 1 : 2,
+            $fields[5],$fields[6],$fields[0],$fields[1],
 
-            $fields[5] =~ /_/           ? 2 : 1,
-            $fields[7] =~ /^5.(7|9|11)/ ? 2 : 1,
-            $fields[7] =~ /patch/       ? 2 : 1,
+            $self->_oncpan($fields[5],$fields[6]) ? 1 : 2,
 
-            $fields[1] eq 'pass'    ? 1 : 0,
-            $fields[1] eq 'fail'    ? 1 : 0,
-            $fields[1] eq 'na'      ? 1 : 0,
-            $fields[1] eq 'unknown' ? 1 : 0);
+            $fields[6] =~ /_/           ? 2 : 1,
+            $fields[8] =~ /^5.(7|9|11)/ ? 2 : 1,
+            $fields[8] =~ /patch/       ? 2 : 1,
+
+            $fields[2] eq 'pass'    ? 1 : 0,
+            $fields[2] eq 'fail'    ? 1 : 0,
+            $fields[2] eq 'na'      ? 1 : 0,
+            $fields[2] eq 'unknown' ? 1 : 0);
     }
 
     if((++$self->{stat_count} % 50) == 0) {
@@ -618,7 +633,7 @@ F<http://wiki.cpantesters.org/>
 =head1 AUTHOR
 
   Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
-  Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2009
+  Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2010
 
 =head1 LICENSE
 

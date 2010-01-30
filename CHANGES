@@ -1,5 +1,8 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.39    30/01/2010
+	- major update to include guid for Metabase/CT2.0.
+
 0.38    19/10/2009
 	- added functionality to update the osname table.
 	- added cpanstats DB schema to examples directory.

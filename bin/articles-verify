@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.03';
+my $VERSION = '0.04';
 
 #----------------------------------------------------------------------------
 
@@ -101,13 +101,13 @@ processing.
 sub check_articles {
     my @list = get_list();
     for my $id (@list) {
-        my @rows = $dbi->get_query('array',"SELECT * FROM articles WHERE id=$id");
-	if(@rows) {
-            my ($xref) = ($rows[0]->[1] =~ /Xref:.*perl\.cpan\.testers:($id)\b/is);
-            print "$id,invalid\n"	unless($xref);
-	} else {
-            print "$id,missing\n";
-	}
+        my @rows = $dbi->get_query('array',"SELECT * FROM articles WHERE id=?",$id);
+        if(@rows) {
+                my ($xref) = ($rows[0]->[1] =~ /Xref:.*perl\.cpan\.testers:($id)\b/is);
+                print "$id,invalid\n"   unless($xref);
+        } else {
+                print "$id,missing\n";
+        }
     }
 }
 
@@ -121,7 +121,7 @@ missing.
 sub verify_articles {
     my @list = get_list();
     for my $id (@list) {
-        my @rows = $dbi->get_query('array',"SELECT * FROM articles WHERE id=$id");
+        my @rows = $dbi->get_query('array',"SELECT * FROM articles WHERE id=?",$id);
         if(@rows) {
             my $subject = get_subject($rows[0]->[1]);
             print "$id,found - $subject\n";
@@ -133,6 +133,9 @@ sub verify_articles {
 
 =item update_articles
 
+Refresh the articles database, updating any existing records and inserting
+missing records.
+
 =cut
 
 sub update_articles {
@@ -140,12 +143,12 @@ sub update_articles {
         || die "Cannot connect to nntp.perl.org";
     ($num, $first, $last) = $nntp->group("perl.cpan.testers");
 
-    my @list = get_list();
+    my @list = get_list($last);
     for my $id (@list) {
         my $article = get_article($id);
         next    unless($article);
 
-        my @rows = $dbi->get_query('array',"SELECT id FROM articles WHERE id = $id");
+        my @rows = $dbi->get_query('array',"SELECT id FROM articles WHERE id=?",$id);
         if(@rows) {
             $dbi->do_query("UPDATE articles SET article=? WHERE id=?",$article,$id);
         } else {
@@ -194,12 +197,13 @@ Returns the list of NNTP ids from the named file.
 =cut
 
 sub get_list {
+    my $last = shift || -1;
     my @list;
 
     if($options{start}) {
-        my $end = $options{end} || get_lastid();
+        my $end = $options{end} || get_lastid() || $last;
         @list = ($options{start} .. $end);
-	print STDERR "START: $options{start}\nEND:   $options{end}\n";
+        print STDERR "START: $options{start}\nEND:   $options{end}\n";
 
     } elsif($options{file}) {
         die "file [$options{file}] not found"    unless(-f $options{file});
@@ -211,7 +215,7 @@ sub get_list {
             push @list, $num;
         }
         $fh->close;
-	printf STDERR "FILE: %d ids found\n", scalar(@list);
+        printf STDERR "FILE: %d ids found\n", scalar(@list);
 
     } else {
         die "No start/end or file list specified\n"
@@ -228,7 +232,8 @@ Returns the last NNTP id recorded in the database.
 
 sub get_lastid {
     my @rows = $dbi->get_query('array',"SELECT MAX(id) FROM articles");
-    return $rows[0]->[0];
+    return $rows[0]->[0]    if(@rows);
+    return;
 }
 
 =item init_options
@@ -276,9 +281,9 @@ sub help {
         print <<HERE;
 
 Usage: $0 \\
-     --config=<file>					\\
-     [ ( --start=n [--end=n] | --file=<file> ) ]	\\
-     [ --update | --verify | --check ]			\\
+     --config=<file>                    \\
+     [ ( --start=n [--end=n] | --file=<file> ) ]    \\
+     [ --update | --verify | --check ]          \\
      [-h] [-v]
 
   --config=<file>   - configuration file
@@ -287,9 +292,9 @@ Usage: $0 \\
   --end             - verify to id
   --file=<file>     - verify these ids (1 per line)
   
-  --update	    - update articles
-  --verify	    - verify articles
-  --check	    - check articles
+  --update      - update articles
+  --verify      - verify articles
+  --check       - check articles
 
   -h                - this help screen
   -v                - program version
@@ -334,7 +339,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2009 Barbie for Miss Barbell Productions.
+  Copyright (C) 2005-2010 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.
