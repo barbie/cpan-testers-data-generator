@@ -10,7 +10,7 @@ WriteMakefile(
         'Config::IniFiles'                  => 0,
         'CPAN::Testers::Common::Article'    => 0.36,
         'CPAN::Testers::Common::DBUtils'    => 0.03,
-        'CPAN::Testers::Common::Utils'      => 0.01,
+        'CPAN::Testers::Common::Utils'      => 0,
         'File::Basename'                    => 0,
         'File::Path'                        => 0,
         'IO::File'                          => 0,
