@@ -1,5 +1,9 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+0.40    02/02/2010
+	- fixes to accommodate GUID changes.
+	- added support for 'type' field.
+
 0.39    30/01/2010
 	- major update to include guid for Metabase/CT2.0.
 

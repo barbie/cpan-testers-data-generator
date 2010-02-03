@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.24';
+my $VERSION = '0.25';
 
 #----------------------------------------------------------------------------
 
@@ -159,7 +159,7 @@ sub missing_stats {
     my $count = 0;
     my $iterator = $dbi->iterator('array',"SELECT * FROM cpanstats WHERE id >= $options{start} AND id <= $options{end}");
     while(my $row = $iterator->()) {
-        next    if($row->[1] =~ /^na|pass|fail|unknown|cpan$/);
+        next    if($row->[2] =~ /^na|pass|fail|unknown|cpan$/);
         _log("BADPARSE:") unless($count++);
         _log("@$row");
     }
@@ -167,11 +167,11 @@ sub missing_stats {
     $count = 0;
     $iterator = $dbi->iterator('array',"SELECT * FROM cpanstats WHERE state in ('na','pass','fail','unknown') AND id >= $options{start} AND id <= $options{end}");
     while(my $row = $iterator->()) {
-        next    if( defined $row->[2] &&
-                    defined $row->[3] &&
+        next    if( defined $row->[3] &&
                     defined $row->[4] &&
                     defined $row->[5] &&
-                    defined $row->[6]);
+                    defined $row->[6] &&
+                    defined $row->[7]);
         _log("\nBADREPORTS:") unless($count++);
         _log("@$row");
     }
@@ -179,9 +179,9 @@ sub missing_stats {
     $count = 0;
     $iterator = $dbi->iterator('array',"SELECT * FROM cpanstats WHERE state in ('cpan') AND id >= $options{start} AND id <= $options{end}");
     while(my $row = $iterator->()) {
-        next    if( defined $row->[2] &&
-                    defined $row->[4] &&
-                    defined $row->[5]);
+        next    if( defined $row->[3] &&
+                    defined $row->[5] &&
+                    defined $row->[6]);
         _log("\nBADUPLOADS:") unless($count++);
         _log("@$row");
     }
@@ -219,21 +219,21 @@ sub check_stats {
         }
 
         # badly parsed entries
-        if($row->[1] =~ /bad/) {
+        if($row->[2] =~ /bad/) {
             my ($subj,$from) = get_subject($row->[0]);
-            _log("$row->[0],$from,$row->[1] - $subj");
+            _log("$row->[0],$from,$row->[2] - $subj");
 #           print join(",",@$row) . "\n";
         }
 
         # missing fields
-        elsif($row->[1] =~ /(na|pass|fail|unknown)/) {
-            unless( defined $row->[2] &&
-                    defined $row->[3] &&
+        elsif($row->[2] =~ /(na|pass|fail|unknown)/) {
+            unless( defined $row->[3] &&
                     defined $row->[4] &&
                     defined $row->[5] &&
-                    defined $row->[6]) {
+                    defined $row->[6] &&
+                    defined $row->[7]) {
                 my ($subj,$from) = get_subject($row->[0]);
-                _log("$row->[0],$from,$row->[1] - $subj");
+                _log("$row->[0],$from,$row->[2] - $subj");
             }
         }
         $count++;

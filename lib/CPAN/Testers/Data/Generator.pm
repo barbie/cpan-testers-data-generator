@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.39';
+$VERSION = '0.40';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -47,7 +47,7 @@ sub new {
 
     my @rows = $self->{CPANSTATS}->get_query('array',q{SELECT osname,ostitle FROM osname});
     for my $row (@rows) {
-        $self->{OSNAMES}{lc $row->[0]} = $row->[1];
+        $self->{OSNAMES}{lc $row->[0]} ||= $row->[1];
     }
 
     if($cfg->SectionExists('DISABLE')) {
@@ -227,13 +227,15 @@ sub parse_article {
     }
 
     my $state = lc $1;
-    my ($dist,$version,$platform,$perl,$osname,$osvers);
+    my ($dist,$version,$platform,$perl,$osname,$osvers,$type);
 
     if($state eq 'cpan') {
+        $type = 1;
         if($object->parse_upload()) {
-            $dist      = $object->distribution;
-            $version   = $object->version;
-            $from      = $object->author;
+            $dist       = $object->distribution;
+            $version    = $object->version;
+            $from       = $object->author;
+            $type       = 1;
         }
 
         return  unless($self->_valid_field($id, 'dist'    => $dist)     || ($options && $options->{exclude}{dist}));
@@ -241,20 +243,21 @@ sub parse_article {
         return  unless($self->_valid_field($id, 'author'  => $from)     || ($options && $options->{exclude}{from}));
 
     } else {
+        $type = 2;
         if($object->parse_report()) {
-            $dist      = $object->distribution;
-            $version   = $object->version;
-            $from      = $object->from;
-            $perl      = $object->perl;
-            $platform  = $object->archname;
-            $osname    = $self->_osname($object->osname);
-            $osvers    = $object->osvers;
-
-            $from      =~ s/'/''/g; #'
+            $dist       = $object->distribution;
+            $version    = $object->version;
+            $from       = $object->from;
+            $perl       = $object->perl;
+            $platform   = $object->archname;
+            $osname     = $self->_osname($object->osname);
+            $osvers     = $object->osvers;
+            $from       =~ s/'/''/g; #'
         }
 
         if($self->{DISABLE} && $self->{DISABLE}{$from}) {
             $state .= ':invalid';
+            $type = 3;
         }
 
         return  unless($self->_valid_field($id, 'dist'     => $dist)        || ($options && $options->{exclude}{dist}));
@@ -269,7 +272,7 @@ sub parse_article {
     my $guid = nntp_to_guid($id);
     my $post = $object->postdate;
     my $date = $object->date;
-    $self->insert_stats($id,$guid,$state,$post,$from,$dist,$version,$platform,$perl,$osname,$osvers,$date)
+    $self->insert_stats($id,$guid,$state,$post,$from,$dist,$version,$platform,$perl,$osname,$osvers,$date,$type)
         unless($options && $options->{check});
 }
 
@@ -277,42 +280,46 @@ sub insert_stats {
     my $self = shift;
 
     my @fields = @_;
-    $fields[$_] ||= 0   for(0);
+    $fields[$_] ||= 0   for(0,12);
     $fields[$_] ||= ''  for(1,2,3,4,5,6,7,9,10,11);
     $fields[$_] ||= '0' for(8);
 
-    my $INSERT = 'INSERT INTO cpanstats VALUES (?,?,?,?,?,?,?,?,?,?,?,?)';
+    my %INSERT = (
+        CPANSTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        LITESTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,date,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    );
 
-    for my $db (qw(CPANSTATS LITESTATS)) {
+    for my $db (qw(LITESTATS CPANSTATS)) {
         my @rows = $self->{$db}->get_query('array','SELECT * FROM cpanstats WHERE id=?',$fields[0]);
         next    if(@rows);
-        $self->{$db}->do_query($INSERT,@fields);
+        $self->{$db}->do_query($INSERT{$db},@fields);
     }
 
-    # push page requests
-    # - note we only update the author if this is the *latest* version of the distribution
-    my $author = $fields[2] eq 'cpan' ? $fields[4] : $self->_get_author($fields[5],$fields[6]);
-    $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
-    $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
+    # only valid reports    
+    if($fields[12] == 2) {
+        # push page requests
+        # - note we only update the author if this is the *latest* version of the distribution
+        my $author = $self->_get_author($fields[5],$fields[6]);
+        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
+        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
 
-    if($fields[2] ne 'cpan') {
         $self->{CPANSTATS}->do_query(
                 'INSERT INTO release_data ' . 
                 '(dist,version,id,guid,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) ' .
-                'VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
 
-            $fields[5],$fields[6],$fields[0],$fields[1],
+                $fields[5],$fields[6],$fields[0],$fields[1],
 
-            $self->_oncpan($fields[5],$fields[6]) ? 1 : 2,
+                $self->_oncpan($fields[5],$fields[6]) ? 1 : 2,
 
-            $fields[6] =~ /_/           ? 2 : 1,
-            $fields[8] =~ /^5.(7|9|11)/ ? 2 : 1,
-            $fields[8] =~ /patch/       ? 2 : 1,
+                $fields[6] =~ /_/           ? 2 : 1,
+                $fields[8] =~ /^5.(7|9|11)/ ? 2 : 1,
+                $fields[8] =~ /patch/       ? 2 : 1,
 
-            $fields[2] eq 'pass'    ? 1 : 0,
-            $fields[2] eq 'fail'    ? 1 : 0,
-            $fields[2] eq 'na'      ? 1 : 0,
-            $fields[2] eq 'unknown' ? 1 : 0);
+                $fields[2] eq 'pass'    ? 1 : 0,
+                $fields[2] eq 'fail'    ? 1 : 0,
+                $fields[2] eq 'na'      ? 1 : 0,
+                $fields[2] eq 'unknown' ? 1 : 0);
     }
 
     if((++$self->{stat_count} % 50) == 0) {
@@ -379,9 +386,9 @@ sub _oncpan {
 sub _osname {
     my ($self,$name) = @_;
     my $lname = lc $name;
-    unless($self->{OSNAME}{$lname}) {
+    unless($self->{OSNAMES}{$lname}) {
         $self->{OSNAMES}{$lname} = uc($name);
-        $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$self->{OSNAMES}{$lname}'});
+        $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$self->{OSNAMES}{$lname}')});
     }
     return $name;
 }
@@ -458,6 +465,8 @@ several index tables to speed up searches. The main table is as below:
   | osname   | TEXT                |
   | osvers   | TEXT                |
   | date     | TEXT                |
+  | guid     | TEXT                |
+  | type     | INTEGER             |
   +----------+---------------------+
 
 It should be noted that 'postdate' refers to the YYYYMM formatted date, whereas
@@ -637,4 +646,4 @@ F<http://wiki.cpantesters.org/>
 
 =head1 LICENSE
 
-This code is distributed under the same license as Perl.
+This code is distributed under the Artistic License 2.0.
