@@ -1,115 +1,263 @@
+perl v5.10.0                      2010-02-23 CPAN::Testers::Data::Generator(3)
+
 NAME
-    CPAN::WWW::Testers::Generator - Download and summarize CPAN Testers data
+       CPAN::Testers::Data::Generator - Download and summarize CPAN Testers
+       data
 
 SYNOPSIS
-      % cpanstats
-      # ... wait patiently
-      # ... then use cpanstats.db, an SQLite database
+         % cpanstats
+         # ... wait patiently, very patiently
+         # ... then use cpanstats.db, an SQLite database
+         # ... or the MySQL database
 
 DESCRIPTION
-    This distribution was originally written by Leon Brocard to download and
-    summarize CPAN Testers data. However, much of the original code has been
-    rewritten to use the CPAN Testers Statistics database generation code. This
-    now means that all the CPAN Testers sites including the Reports site, the
-    Statistics site and the CPAN Dependencies site, can use the same database.
+       This distribution was originally written by Leon Brocard to download
+       and summarize CPAN Testers data. However, all of the original code has
+       been rewritten to use the CPAN Testers Statistics database generation
+       code. This now means that all the CPAN Testers sites including the
+       Reports site, the Statistics site and the CPAN Dependencies site, can
+       use the same database.
 
-    This module downloads articles from the cpan-testers newsgroup, generating or
-    updating an SQLite database containing all the most important information. You
-    can then query this database, or use CPAN::WWW::Testers to present it over the
-    web.
+       This module downloads articles from the cpan-testers newsgroup,
+       generating or updating an SQLite database containing all the most
+       important information. You can then query this database, or use
+       CPAN::WWW::Testers to present it over the web.
 
-    A good example query for Acme-Colour would be:
+       A good example query for Acme-Colour would be:
 
-      SELECT version, status, count(*) FROM reports WHERE
-      distribution = "Acme-Colour" group by version, status;
+         SELECT version, status, count(*) FROM cpanstats WHERE
+         distribution = "Acme-Colour" group by version, state;
 
-    To create a database from scratch can take several hours, as there are now over
-    1.5 million articles in the newgroup. As such updating from a known copy of the
-    database is much more advisable. If you don't want to generate the database
-    yourself, you can obtain the latest official copy (compressed with gzip) at
-    http://devel.cpantesters.org/cpanstats.db.gz
+       To create a database from scratch can take several days, as there are
+       now over 2 million articles in the newgroup. As such updating from a
+       known copy of the database is much more advisable. If you don’t want to
+       generate the database yourself, you can obtain the latest official copy
+       (compressed with gzip) at http://devel.cpantesters.org/cpanstats.db.gz
+
+       With over 6 million articles in the archive, if you do plan to run this
+       software to generate the databases it is recommended you utilise a
+       high-end processor machine. Even with a reasonable processor it can
+       take a week!
+
+SQLite DATABASE SCHEMA
+       The cpanstats database schema is very straightforward, one main table
+       with several index tables to speed up searches. The main table is as
+       below:
+
+         +--------------------------------+
+         | cpanstats                      |
+         +----------+---------------------+
+         | id       | INTEGER PRIMARY KEY |
+         | state    | TEXT                |
+         | postdate | TEXT                |
+         | tester   | TEXT                |
+         | dist     | TEXT                |
+         | version  | TEXT                |
+         | platform | TEXT                |
+         | perl     | TEXT                |
+         | osname   | TEXT                |
+         | osvers   | TEXT                |
+         | date     | TEXT                |
+         | guid     | TEXT                |
+         | type     | INTEGER             |
+         +----------+---------------------+
+
+       It should be noted that ’postdate’ refers to the YYYYMM formatted date,
+       whereas the ’date’ field refers to the YYYYMMDDhhmm formatted date and
+       time.
+
+       The articles database schema is again very straightforward, and
+       consists of one table, as below:
+
+         +--------------------------------+
+         | articles                       |
+         +----------+---------------------+
+         | id       | INTEGER PRIMARY KEY |
+         | article  | TEXT                |
+         +----------+---------------------+
+
+SIGNIFICANT CHANGES
+   v0.31 CHANGES
+       With the release of v0.31, a number of changes to the codebase were
+       made as a further move towards CPAN Testers 2.0. The first change is
+       the name for this distribution. Now titled
+       ’CPAN-Testers-Data-Generator’, this now fits more appropriately within
+       the CPAN-Testers namespace on CPAN.
+
+       The second significant change is to now reference a MySQL cpanstats
+       database.  The SQLite version is still updated as before, as a number
+       of other websites and toolsets still rely on that database file format.
+       However, in order to make the CPAN Testers Reports website more
+       dynamic, an SQLite database is not really appropriate for a high demand
+       website.
+
+       The database creation code is now available as a standalone program, in
+       the examples directory, and all the database communication is now
+       handled by the new distribution CPAN-Testers-Common-DBUtils.
+
+   v0.41 CHANGES
+       In the next stage of development of CPAN Testers 2.0, the id field used
+       within the database schema above for the cpanstats table no longer
+       matches the NNTP ID value, although the id in the articles does still
+       reference the NNTP ID.
+
+       In order to correctly reference the id in the articles table, you will
+       need to use the function guid_to_nntp() with
+       CPAN::Testers::Common::Utils, using the new guid field in the cpanstats
+       table.
+
+       As of this release the cpanstats id field is a unique auto incrementing
+       field.
+
+       The next release of this distribution will be focused on generation of
+       stats using the Metabase storage API.
 
 INTERFACE
-  The Constructor
-    * new
-        Instatiates the object CPAN::WWW::Testers::Generator.
+   The Constructor
+       ·   new
 
-  Methods
-    * logfile
+           Instatiates the object CPAN::Testers::Data::Generator. Accepts a
+           hash containing values to prepare the object. These are described
+           as:
 
-        Accessor to set/get where the logging information is to be kept. Note 
-	that if this not set, no logging occurs.
+             my $obj = CPAN::Testers::Data::Generator->new(
+                           logfile => './here/logfile',
+                           config  => './here/config.ini'
+             );
 
-    * database
+           Where ’logfile’ is the location to write log messages. Log messages
+           are only written if a logfile entry is specified, and will always
+           append to any existing file. The ’config’ should contain the path
+           to the configuration file, used to define the database access and
+           general operation settings.
 
-        Accessor to set/get the database full path.
+           In addition the binary keys of ’ignore’ and ’nostore’ are
+           available. ’ignore’ is used to ignore NNTP entries which return no
+           article and continue processing articles, while ’nostore’ will
+           delete all articles, except the last one received, thus reducing
+           space in the SQL database.
 
-    * directory
+   Public Methods
+       ·   generate
 
-        Accessor to set/get the directory where the database is to be created.
+           Starting from the last recorded article, retrieves all the more
+           recent articles from the NNTP server, parsing each and recording
+           the articles that either upload announcements or reports.
 
-    * generate
+       ·   rebuild
 
-        Starting from the last recorded article, retrieves all the more recent
-	articles from the NNTP server, parsing each and recording the articles 
-	that either upload announcements or reports.
+           In the event that the cpanstats database needs regenerating, either
+           in part or for the whole database, this method allow you to do so.
+           You may supply parameters as to the ’start’ and ’end’ values
+           (inclusive), where all records are assumed by default. Note that
+           the ’nostore’ option is ignored and no records are deleted from the
+           articles database.
 
-    * insert_article
+       ·   reparse
 
-        Inserts the components of a parsed article into the database.
+           Rather than a complete rebuild the option to selective reparse
+           selected entries is useful if there are posts which have since been
+           identified as valid and now have supporting parsing code within the
+           codebase.
 
-DATABASE SCHEMA
+           In addition there is the option to exclude fields from parsing
+           checks, where they may be corrupted, and can be later amended using
+           the ’cpanstats-update’ tool.
 
-    The database schema is very straightforward, one main table with several
-    index tables to speed up searches. The main table is as below:
+   Private Methods
+       ·   cleanup
 
-      +--------------------------------+
-      | cpanstats                      |
-      +----------+---------------------+
-      | id       | INTEGER PRIMARY KEY |
-      | state    | TEXT                |
-      | postdate | TEXT                |
-      | tester   | TEXT                |
-      | dist     | TEXT                |
-      | version  | TEXT                |
-      | platform | TEXT                |
-      | perl     | TEXT                |
-      | osname   | TEXT                |
-      | osvers   | TEXT                |
-      | archname | TEXT                |
-      +----------+---------------------+
+           In the event that you do not wish to store all the articles
+           permanently in the articles database, this method removes all but
+           the most recent entry, which is kept to ensure that subsequent runs
+           will start from the correct article. To enable this feature,
+           specify ’nostore’ within the has passed to new().
+
+       ·   commit
+
+           To speed up the transaction process, a commit is performed every 50
+           inserts.  This method is used as part of the clean up process to
+           ensure all transactions are completed.
+
+       ·   nntp_connect
+
+           Sets up the connection to the NNTP server.
+
+       ·   parse_article
+
+           Parses an article extracting the metadata required for the stats
+           database.
+
+       ·   insert_article
+
+           Inserts an article into the articles database.
+
+       ·   insert_stats
+
+           Inserts the components of a parsed article into the statistics
+           database.
 
 HISTORY
-    The CPAN testers was conceived back in May 1998 by Graham Barr and Chris 
-    Nandor as a way to provide multi-platform testing for modules. Today there 
-    are over 1.5 million tester reports and more than 100 testers each month
-    giving valuable feedback for users and authors alike.
-      
+       The CPAN testers was conceived back in May 1998 by Graham Barr and
+       Chris Nandor as a way to provide multi-platform testing for modules.
+       Today there are over 2 million tester reports and more than 100 testers
+       each month giving valuable feedback for users and authors alike.
+
 BECOME A TESTER
-    The objective of the CPAN Testers is to test as many of the distributions 
-    on CPAN as possible, on as many platforms as possible. The ultimate goal is
-    to improve the portability of the distributions on CPAN, and provide good 
-    feedback to the authors.
+       Whether you have a common platform or a very unusual one, you can help
+       by testing modules you install and submitting reports. There are plenty
+       of module authors who could use test reports and helpful feedback on
+       their modules and distributions.
 
-    Whether you have a common platform or a very unusual one, you can help by 
-    testing modules you install and submitting reports. There are plenty of 
-    module authors who could use test reports and helpful feedback on their 
-    modules and distributions. 
+       If you’d like to get involved, please take a look at the CPAN Testers
+       Wiki, where you can learn how to install and configure one of the
+       recommended smoke tools.
 
-    If you'd like to get involved, please take a look at the CPAN Testers Wiki,
-    where you can learn how to install and configure one of the recommended 
-    smoke tools.
+       For further help and advice, please subscribe to the the CPAN Testers
+       discussion mailing list.
 
-    For further help and advice, please subscribe to the the CPAN Testers 
-    discussion mailing list.
+         CPAN Testers Wiki
+           - http://wiki.cpantesters.org
+         CPAN Testers Discuss mailing list
+           - http://lists.cpan.org/showlist.cgi?name=cpan-testers-discuss
 
-    CPAN Testers Wiki - http://wiki.cpantesters.org
-    CPAN Testers Discuss mailing list
-    - http://lists.cpan.org/showlist.cgi?name=cpan-testers-discuss
+BUGS, PATCHES & FIXES
+       There are no known bugs at the time of this release. However, if you
+       spot a bug or are experiencing difficulties, that is not explained
+       within the POD documentation, please send bug reports and patches to
+       the RT Queue (see below).
+
+       Fixes are dependant upon their severity and my availablity. Should a
+       fix not be forthcoming, please feel free to (politely) remind me.
+
+       RT Queue -
+       http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
+
+SEE ALSO
+       CPAN::Testers::WWW::Statistics
+
+       http://www.cpantesters.org/, http://stats.cpantesters.org/,
+       http://wiki.cpantesters.org/
 
 AUTHOR
-    Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
-    Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008
+       It should be noted that the original code for this distribution began
+       life under another name. The original distribution generated data for
+       the original CPAN Testers website. However, in 2008 the code was
+       reworked to generate data in the format for the statistics data
+       analysis, which in turn was reworked to drive the redesign of the all
+       the CPAN Testers websites. To reflect the code changes, a new name was
+       given to the distribution.
+
+   CPAN-WWW-Testers-Generator
+         Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
+         Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2010
+
+   CPAN-Testers-Data-Generator
+         Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2010
 
 LICENSE
-    This code is distributed under the same license as Perl.
+       This code is distributed under the Artistic License 2.0.
+
+
+
+perl v5.10.0                      2010-02-23 CPAN::Testers::Data::Generator(3)

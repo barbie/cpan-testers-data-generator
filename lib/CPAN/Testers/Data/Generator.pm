@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '0.40';
+$VERSION = '0.41';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -92,8 +92,10 @@ sub generate {
             }
         }
 
-        $self->insert_article($id,$article);
         $self->parse_article($id,$article);
+        next    unless($self->{article}{guid});
+        $self->cache_report();
+        $self->store_report();
     }
 
     $self->cleanup  if($self->{nostore});
@@ -128,6 +130,8 @@ sub rebuild {
         }
 
         $self->parse_article($id,$article);
+        next    unless($self->{article}{guid});
+        $self->store_report();
     }
 
     $self->commit();
@@ -146,6 +150,7 @@ sub reparse {
         #print STDERR "id=[$id], last=[$last]\n";
         next    if($id < 1 || ($id > $last && $id > $self->{nntp_last}));
 
+        my $save_article = 0;
         my $article;
         my @rows = $self->{LITEARTS}->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
         if(@rows) {
@@ -158,19 +163,21 @@ sub reparse {
 
         } else {
             $article = join "", @{$self->{nntp}->article($id) || []};
-            $self->insert_article($id,$article) if($article);
             #print STDERR "got NNTP article\n";
+            $save_article = 1;
         }
-
 
         next    unless($article);
         $self->_log("ID [$id]");
 
-        unless($options && $options->{check}) {
-            $self->{CPANSTATS}->do_query('DELETE FROM cpanstats WHERE id = ?',$id);
-            $self->{LITESTATS}->do_query('DELETE FROM cpanstats WHERE id = ?',$id);
-        }
         $self->parse_article($id,$article,$options);
+        next    if($options && $options->{check});
+        next    unless($self->{article}{guid});
+
+        $self->{CPANSTATS}->do_query('DELETE FROM cpanstats WHERE guid = ?',$self->{article}{guid});
+        $self->{LITESTATS}->do_query('DELETE FROM cpanstats WHERE guid = ?',$self->{article}{guid});
+        $self->cache_report() if($save_article);
+        $self->store_report();
     }
 
     $self->commit();
@@ -209,6 +216,8 @@ sub nntp_connect {
 
 sub parse_article {
     my ($self,$id,$article,$options) = @_;
+
+    $self->{article} = { article => $article };
     my $object = CPAN::Testers::Common::Article->new($article);
 
     unless($object) {
@@ -216,87 +225,89 @@ sub parse_article {
         return;
     }
 
-    my $subject = $object->subject;
-    my $from    = $object->from;
-    $self->_log(" [$from] $subject\n");
-    return    if($subject =~ /Re:/i);
+    $self->{article}{subject} = $object->subject;
+    $self->{article}{from}    = $object->from;
+    $self->_log(" [$self->{article}{from}] $self->{article}{subject}\n");
+    return    if($self->{article}{subject} =~ /Re:/i);
 
-    unless($subject =~ /(CPAN|FAIL|PASS|NA|UNKNOWN)\s+/i) {
+    unless($self->{article}{subject} =~ /(CPAN|FAIL|PASS|NA|UNKNOWN)\s+/i) {
         $self->_log(" . [$id] ... bad subject\n");
         return;
     }
 
-    my $state = lc $1;
-    my ($dist,$version,$platform,$perl,$osname,$osvers,$type);
+    $self->{article}{state} = lc $1;
 
-    if($state eq 'cpan') {
-        $type = 1;
+    if($self->{article}{state} eq 'cpan') {
+        $self->{article}{type} = 1;
         if($object->parse_upload()) {
-            $dist       = $object->distribution;
-            $version    = $object->version;
-            $from       = $object->author;
-            $type       = 1;
+            $self->{article}{dist}       = $object->distribution;
+            $self->{article}{version}    = $object->version;
+            $self->{article}{from}       = $object->author;
+            $self->{article}{type}       = 1;
         }
 
-        return  unless($self->_valid_field($id, 'dist'    => $dist)     || ($options && $options->{exclude}{dist}));
-        return  unless($self->_valid_field($id, 'version' => $version)  || ($options && $options->{exclude}{version}));
-        return  unless($self->_valid_field($id, 'author'  => $from)     || ($options && $options->{exclude}{from}));
+        return  unless($self->_valid_field($id, 'dist'    => $self->{article}{dist})     || ($options && $options->{exclude}{dist}));
+        return  unless($self->_valid_field($id, 'version' => $self->{article}{version})  || ($options && $options->{exclude}{version}));
+        return  unless($self->_valid_field($id, 'author'  => $self->{article}{from})     || ($options && $options->{exclude}{from}));
 
     } else {
-        $type = 2;
+        $self->{article}{type} = 2;
         if($object->parse_report()) {
-            $dist       = $object->distribution;
-            $version    = $object->version;
-            $from       = $object->from;
-            $perl       = $object->perl;
-            $platform   = $object->archname;
-            $osname     = $self->_osname($object->osname);
-            $osvers     = $object->osvers;
-            $from       =~ s/'/''/g; #'
+            $self->{article}{dist}       = $object->distribution;
+            $self->{article}{version}    = $object->version;
+            $self->{article}{from}       = $object->from;
+            $self->{article}{perl}       = $object->perl;
+            $self->{article}{platform}   = $object->archname;
+            $self->{article}{osname}     = $self->_osname($object->osname);
+            $self->{article}{osvers}     = $object->osvers;
+            $self->{article}{from}       =~ s/'/''/g; #'
         }
 
-        if($self->{DISABLE} && $self->{DISABLE}{$from}) {
-            $state .= ':invalid';
-            $type = 3;
+        if($self->{DISABLE} && $self->{DISABLE}{$self->{article}{from}}) {
+            $self->{article}{state} .= ':invalid';
+            $self->{article}{type} = 3;
         }
 
-        return  unless($self->_valid_field($id, 'dist'     => $dist)        || ($options && $options->{exclude}{dist}));
-        return  unless($self->_valid_field($id, 'version'  => $version)     || ($options && $options->{exclude}{version}));
-        return  unless($self->_valid_field($id, 'from'     => $from)        || ($options && $options->{exclude}{from}));
-        return  unless($self->_valid_field($id, 'perl'     => $perl)        || ($options && $options->{exclude}{perl}));
-        return  unless($self->_valid_field($id, 'platform' => $platform)    || ($options && $options->{exclude}{platform}));
-        return  unless($self->_valid_field($id, 'osname'   => $osname)      || ($options && $options->{exclude}{osname}));
-        return  unless($self->_valid_field($id, 'osvers'   => $osvers)      || ($options && $options->{exclude}{osname}));
+        return  unless($self->_valid_field($id, 'dist'     => $self->{article}{dist})        || ($options && $options->{exclude}{dist}));
+        return  unless($self->_valid_field($id, 'version'  => $self->{article}{version})     || ($options && $options->{exclude}{version}));
+        return  unless($self->_valid_field($id, 'from'     => $self->{article}{from})        || ($options && $options->{exclude}{from}));
+        return  unless($self->_valid_field($id, 'perl'     => $self->{article}{perl})        || ($options && $options->{exclude}{perl}));
+        return  unless($self->_valid_field($id, 'platform' => $self->{article}{platform})    || ($options && $options->{exclude}{platform}));
+        return  unless($self->_valid_field($id, 'osname'   => $self->{article}{osname})      || ($options && $options->{exclude}{osname}));
+        return  unless($self->_valid_field($id, 'osvers'   => $self->{article}{osvers})      || ($options && $options->{exclude}{osname}));
     }
 
-    my $guid = nntp_to_guid($id);
-    my $post = $object->postdate;
-    my $date = $object->date;
-    $self->insert_stats($id,$guid,$state,$post,$from,$dist,$version,$platform,$perl,$osname,$osvers,$date,$type)
-        unless($options && $options->{check});
+    $self->{article}{nntp} = $id;
+    $self->{article}{guid} = nntp_to_guid($id);
+    $self->{article}{post} = $object->postdate;
+    $self->{article}{date} = $object->date;
 }
 
-sub insert_stats {
-    my $self = shift;
+sub store_report {
+    my ($self) = @_;
 
-    my @fields = @_;
-    $fields[$_] ||= 0   for(0,12);
-    $fields[$_] ||= ''  for(1,2,3,4,5,6,7,9,10,11);
-    $fields[$_] ||= '0' for(8);
+    my @fields = map {$self->{article}{$_}} qw(guid state post from dist version platform perl osname osvers date type);
+    $fields[$_] ||= 0   for(11);
+    $fields[$_] ||= ''  for(0,1,2,3,4,5,6,7,8,9,10);
+    $fields[$_] ||= '0' for(7);
 
     my %INSERT = (
-        CPANSTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        LITESTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,date,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        LITESTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
 
-    for my $db (qw(LITESTATS CPANSTATS)) {
-        my @rows = $self->{$db}->get_query('array','SELECT * FROM cpanstats WHERE id=?',$fields[0]);
-        next    if(@rows);
-        $self->{$db}->do_query($INSERT{$db},@fields);
-    }
+    my @rows = $self->{CPANSTATS}->get_query('array','SELECT * FROM cpanstats WHERE guid=?',$fields[0]);
+    return  if(@rows);
+
+    $self->{article}{id} = $self->{CPANSTATS}->id_query($INSERT{CPANSTATS},@fields);
+
+    @rows = $self->{LITESTATS}->get_query('array','SELECT * FROM cpanstats WHERE guid=?',$fields[0]);
+    $self->{LITESTATS}->do_query($INSERT{LITESTATS},$self->{article}{id},@fields)   unless(@rows);
 
     # only valid reports    
-    if($fields[12] == 2) {
+    if($self->{article}{type} == 2) {
+        unshift @fields, $self->{article}{id};
+
         # push page requests
         # - note we only update the author if this is the *latest* version of the distribution
         my $author = $self->_get_author($fields[5],$fields[6]);
@@ -304,22 +315,22 @@ sub insert_stats {
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
 
         $self->{CPANSTATS}->do_query(
-                'INSERT INTO release_data ' . 
-                '(dist,version,id,guid,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) ' .
-                'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO release_data ' . 
+            '(dist,version,id,guid,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) ' .
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
 
-                $fields[5],$fields[6],$fields[0],$fields[1],
+            $fields[5],$fields[6],$fields[0],$fields[1],
 
-                $self->_oncpan($fields[5],$fields[6]) ? 1 : 2,
+            $self->_oncpan($fields[5],$fields[6]) ? 1 : 2,
 
-                $fields[6] =~ /_/           ? 2 : 1,
-                $fields[8] =~ /^5.(7|9|11)/ ? 2 : 1,
-                $fields[8] =~ /patch/       ? 2 : 1,
+            $fields[6] =~ /_/           ? 2 : 1,
+            $fields[8] =~ /^5.(7|9|11)/ ? 2 : 1,
+            $fields[8] =~ /patch/       ? 2 : 1,
 
-                $fields[2] eq 'pass'    ? 1 : 0,
-                $fields[2] eq 'fail'    ? 1 : 0,
-                $fields[2] eq 'na'      ? 1 : 0,
-                $fields[2] eq 'unknown' ? 1 : 0);
+            $fields[2] eq 'pass'    ? 1 : 0,
+            $fields[2] eq 'fail'    ? 1 : 0,
+            $fields[2] eq 'na'      ? 1 : 0,
+            $fields[2] eq 'unknown' ? 1 : 0);
     }
 
     if((++$self->{stat_count} % 50) == 0) {
@@ -328,10 +339,11 @@ sub insert_stats {
     }
 }
 
-sub insert_article {
+sub cache_report {
     my $self = shift;
+    return  unless($self->{article}{nntp} && $self->{article}{article});
 
-    my @fields = @_;
+    my @fields = map {$self->{article}{$_}} qw(nntp article);;
     $fields[$_] ||= 0   for(0);
     $fields[$_] ||= ''  for(1);
 
@@ -402,7 +414,6 @@ sub _log {
     $fh->close;
 }
 
-
 1;
 
 __END__
@@ -442,9 +453,9 @@ database is much more advisable. If you don't want to generate the database
 yourself, you can obtain the latest official copy (compressed with gzip) at
 http://devel.cpantesters.org/cpanstats.db.gz
 
-With over 2 million articles in the archive, if you do plan to run this
+With over 6 million articles in the archive, if you do plan to run this
 software to generate the databases it is recommended you utilise a high-end
-processor machine. Even with a reasonable processor it can takes days!
+processor machine. Even with a reasonable processor it can take a week!
 
 =head1 SQLite DATABASE SCHEMA
 
@@ -464,7 +475,7 @@ several index tables to speed up searches. The main table is as below:
   | perl     | TEXT                |
   | osname   | TEXT                |
   | osvers   | TEXT                |
-  | date     | TEXT                |
+  | fulldate | TEXT                |
   | guid     | TEXT                |
   | type     | INTEGER             |
   +----------+---------------------+
@@ -482,7 +493,9 @@ table, as below:
   | article  | TEXT                |
   +----------+---------------------+
 
-=head1 v0.31 CHANGES
+=head1 SIGNIFICANT CHANGES
+
+=head2 v0.31 CHANGES
 
 With the release of v0.31, a number of changes to the codebase were made as
 a further move towards CPAN Testers 2.0. The first change is the name for this
@@ -498,6 +511,21 @@ appropriate for a high demand website.
 The database creation code is now available as a standalone program, in the
 examples directory, and all the database communication is now handled by the
 new distribution CPAN-Testers-Common-DBUtils.
+
+=head2 v0.41 CHANGES
+
+In the next stage of development of CPAN Testers 2.0, the id field used within
+the database schema above for the cpanstats table no longer matches the NNTP
+ID value, although the id in the articles does still reference the NNTP ID.
+
+In order to correctly reference the id in the articles table, you will need to
+use the function guid_to_nntp() with CPAN::Testers::Common::Utils, using the
+new guid field in the cpanstats table.
+
+As of this release the cpanstats id field is a unique auto incrementing field.
+
+The next release of this distribution will be focused on generation of stats
+using the Metabase storage API.
 
 =head1 INTERFACE
 
@@ -582,11 +610,11 @@ Sets up the connection to the NNTP server.
 
 Parses an article extracting the metadata required for the stats database.
 
-=item * insert_article
+=item * cache_report
 
 Inserts an article into the articles database.
 
-=item * insert_stats
+=item * store_report
 
 Inserts the components of a parsed article into the statistics database.
 
@@ -632,7 +660,6 @@ http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 
-L<CPAN::WWW::Testers>,
 L<CPAN::Testers::WWW::Statistics>
 
 F<http://www.cpantesters.org/>,
@@ -641,8 +668,21 @@ F<http://wiki.cpantesters.org/>
 
 =head1 AUTHOR
 
+It should be noted that the original code for this distribution began life
+under another name. The original distribution generated data for the original 
+CPAN Testers website. However, in 2008 the code was reworked to generate data
+in the format for the statistics data analysis, which in turn was reworked to 
+drive the redesign of the all the CPAN Testers websites. To reflect the code 
+changes, a new name was given to the distribution.
+
+=head2 CPAN-WWW-Testers-Generator
+  
   Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
   Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2010
+
+=head2 CPAN-Testers-Data-Generator
+
+  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2010
 
 =head1 LICENSE
 
