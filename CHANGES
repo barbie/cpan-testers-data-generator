@@ -1,6 +1,6 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
-0.41    current
+0.41    18/03/2010
 	- fixes to change the 'id' (was NNTP ID) to an auto incremental field.
 	- reworked logic to better fit latest changes.
 	- added repository to META.yml.
