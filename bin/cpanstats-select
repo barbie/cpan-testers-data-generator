@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.10';
+my $VERSION = '0.11';
 
 #----------------------------------------------------------------------------
 
@@ -18,7 +18,8 @@ cpanstats-select - select stats from the CPAN Testers Statistics database.
                                     \
     [--sql=<sql>]                   \
                                     \
-    [--nntp|-n=<nntpid>]            \
+    [--id|-i=<id>]                  \
+    [--guid=<id>]                   \
     [--grade|-g=<grade>]            \
     [--disto|-m=<distname>]         \
     [--dist|-d=<distname>]          \
@@ -89,7 +90,8 @@ if($options{sql}) {
     # only one of the following at a time
     @where = ("dist LIKE '\%$options{distro}\%'")           if(defined $options{distro});
     @where = ("dist='$options{dist}'")                      if(defined $options{dist});
-    @where = ("id=$options{nntp}")                          if(defined $options{nntp});
+    @where = ("id=$options{id}")                            if(defined $options{id});
+    @where = ("guid=$options{guid}")                        if(defined $options{guid});
 
     push @where, "state='$options{grade}'"                  if(defined $options{grade});
     push @where, "version='$options{version}'"              if(defined $options{version});
@@ -125,7 +127,8 @@ sub init_options {
         'config=s',
         'database=s',
         'sql=s',
-        'nntp|n=s',
+        'id|i=s',
+        'guid=s',
         'grade|g=s',
         'distro|m=s',
         'dist|d=s',
@@ -171,7 +174,8 @@ Usage: $0
      --config=<file>                - configuration file
      --database=<dbcode>            - CPANSTATS or LITESTATS
 
-    [--nntp|-n=<nntpid>]            - NNTP article id
+    [--id|-i=<id>]                  - cpanstats report id
+    [--guid=<guid>]                 - metabase report guid
     [--grade|-g=<grade>]            - report grade
     [--dist|-d=<distname>]          - distribution name
     [--disto|-m=<distname>]         - distribution name (partial match)

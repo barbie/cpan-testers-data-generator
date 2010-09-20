@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 
-my $VERSION = '0.07';
+my $VERSION = '1.00';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -11,7 +11,7 @@ use lib qw(../lib lib);
 use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 
-use CPAN::Testers::Data::Generator   '0.31';
+use CPAN::Testers::Data::Generator   '1.00';
 
 #----------------------------------------------------------------------------
 # Variables
@@ -24,15 +24,13 @@ my %options;
 init_options();
 
 my $t = CPAN::Testers::Data::Generator->new(
-    ignore      => $options{ignore},
-    nostore     => $options{nostore},
     config      => $options{config},
     logfile     => $options{log},
 );
 
-if($options{rebuild})   { $t->rebuild($options{start},$options{end}); }
-else                    { $t->generate; }
-
+if($options{rebuild})		{ $t->rebuild( map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
+elsif($options{reparse})	{ $t->reparse( $options{reparse} ); }
+else				{ $t->generate( $options{nonstop} ); }
 
 # -------------------------------------
 # Subroutines
@@ -40,13 +38,16 @@ else                    { $t->generate; }
 sub init_options {
     GetOptions( \%options,
         'config|c=s',
-        'ignore|i',
-        'nostore|n',
-        'log|l=s',
+	'log|l=s',
+        'nonstop|n',
 
-        'rebuild|r',
-        'start=i',
-        'end=i',
+        'rebuild',
+        'gstart=s',
+        'gend=s',
+        'dstart=s',
+        'dend=s',
+
+	'reparse=s',
 
         'help|h',
         'version|v'
@@ -63,16 +64,23 @@ sub _help {
         print <<HERE;
 
 Usage: $0 \
-         [-c=<file>] [-r [--start=n] [--end=n]] [-log=<file>] \
-         [-i] [-n] [-h] [-v]
+         [-c=<file>] [-log=<file>] \
+	 [--rebuild ( --gstart=s [--gend=s]] | --dstart=s [--dend=s]] ) \
+	 [--reparse=s]
+         [-n] [-h] [-v]
 
   -c=<file>      configuration file
   -l=<file>      output log file
-  -r             rebuild cpanstats from articles
-  --start        start id to rebuild
-  --end          end id to rebuild
-  -i             ignore no article errors
-  -n             do not store old articles
+  -n             nonstop, repeat until no more articles
+
+  --rebuild      rebuild cpanstats from local metabase
+  --gstart       start rebuild from guid
+  --gend         end rebuild at guid
+  --dstart       start rebuild from date (YYYY-MM-DDThh-mm-ssZ)
+  --dend         end rebuild at date (YYYY-MM-DDThh-mm-ssZ)
+
+  --reparse      reparse a specific guid from the metabase
+
   -h             this help screen
   -v             program version
 
@@ -92,21 +100,28 @@ cpanstats - script to access the NNTP server and update the database.
 
 =head1 SYNOPSIS
 
-  # use defaults
+  # single run (max 2500 reports) update from remote metabase
   cpanstats -c=data/settings.ini
 
-  # rebuild default database
-  cpanstats -c=data/settings.ini --rebuild --start=100 --end=200
+  # continually update database from remote metabase, until no more
+  # reports are returned
+  cpanstats -c=data/settings.ini --nonstop
+
+  # rebuild default database from local cache
+  cpanstats -c=data/settings.ini --rebuild	# rebuild entire local dataset
+  cpanstats -c=data/settings.ini --rebuild --gstart=$guid1
+  cpanstats -c=data/settings.ini --rebuild --gstart=$guid1 --end=$guid2
+  cpanstats -c=data/settings.ini --rebuild --dstart=$date1
+  cpanstats -c=data/settings.ini --rebuild --dstart=$date1 --end=$date2
   
-  # update database in named directory, without storing articles,
-  # and ignoring any missing article responses from the NNTP server
-  cpanstats -c=data/settings.ini --nostore --ignore
+  # reparse a single report from remote metabase
+  cpanstats -c=data/settings.ini --reparse=$guid1
 
 =head1 DESCRIPTION
 
 Acts as a wrapper script to the underlying CPAN::Testers::Data::Generator code
-that downloads articles from the NNTP server, extracts all components of each,
-then stores the data into a local SQLite database.
+that interfaces with the Metabase server, parsing and storing facts relating to
+submitted CPAN Testers reports.
 
 =head1 BUGS, PATCHES & FIXES
 
@@ -123,7 +138,6 @@ http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 
-L<CPAN::WWW::Testers>,
 L<CPAN::Testers::WWW::Statistics>
 
 F<http://www.cpantesters.org/>,

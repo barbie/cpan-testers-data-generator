@@ -3,7 +3,7 @@ use strict;
 
 use vars qw($VERSION);
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 $|++;
 
@@ -22,9 +22,9 @@ toolsets.
 
 There are 3 databases created by this tool:
 
-  * CPANSTATS - MySQL stats database
-  * LITESTATS - SQLite stats database
-  * LITEARTS  - SQLite articles database
+  * CPANSTATS - MySQL cpanstats database
+  * LITESTATS - SQLite cpanstats database
+  * METABASE  - MySQL Metabase database
 
 If you require the Uploads database, please see the distribution
 CPAN::Testers::Data::Uploads.
@@ -56,14 +56,14 @@ sub init_options {
     help(1)    if($options{help});
     help(0)    if($options{version});
 
-    help(1,"Must specific the configuration file")              unless($options{config});
+    help(1,"Must specific the configuration file")              unless(   $options{config});
     help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
 
     # load configuration
     my $cfg = Config::IniFiles->new( -file => $options{config} );
 
     # configure databases
-    for my $db (qw(CPANSTATS LITESTATS LITEARTS)) {
+    for my $db (qw(CPANSTATS LITESTATS METABASE)) {
         die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
         my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
         unlink $opts{database}  if($opts{driver} =~ /SQLite/i);
@@ -78,18 +78,19 @@ sub process {
     push @sql,
             'DROP TABLE IF EXISTS cpanstats',
             'CREATE TABLE cpanstats (
-                 id         int(10) unsigned NOT NULL,
-                 state      varchar(32),
-                 postdate   varchar(8),
-                 tester     varchar(255),
-                 dist       varchar(255),
-                 version    varchar(255),
-                 platform   varchar(255),
-                 perl       varchar(255),
-                 osname     varchar(255),
-                 osvers     varchar(255),
-                 fulldate   varchar(32),
-                 PRIMARY KEY (id))',
+                id          int(10) unsigned NOT NULL,
+		        guid        char(36) NOT NULL,
+                state       varchar(32),
+                postdate    varchar(8),
+                tester      varchar(255),
+                dist        varchar(255),
+                version     varchar(255),
+                platform    varchar(255),
+                perl        varchar(255),
+                osname      varchar(255),
+                osvers      varchar(255),
+                fulldate    varchar(32),
+                PRIMARY KEY (id,guid))',
 
             'DROP TABLE IF EXISTS page_requests',
             'CREATE TABLE page_requests (
@@ -98,11 +99,30 @@ sub process {
                 weight      int(2) unsigned NOT NULL
             )',
 
-            'DROP TABLE IF EXISTS release_summary',
+            'DROP TABLE IF EXISTS release_data',
+            'CREATE TABLE release_data (
+                dist        varchar(255) NOT NULL,
+                version     varchar(255) NOT NULL,
+                id          int(10) unsigned NOT NULL,
+                guid        char(36) NOT NULL,
+                oncpan      tinyint(4) default 0,
+                distmat     tinyint(4) default 0,
+                perlmat     tinyint(4) default 0,
+                patched     tinyint(4) default 0,
+                pass        int(10) default 0,
+                fail        int(10) default 0,
+                na          int(10) default 0,
+                unknown     int(10) default 0,
+                PRIMARY KEY (id,guid),
+                INDEX (dist,version)
+            )',
+
+	    'DROP TABLE IF EXISTS release_summary',
             'CREATE TABLE release_summary (
                 dist        varchar(255) NOT NULL,
                 version     varchar(255) NOT NULL,
                 id          int(10) unsigned NOT NULL,
+                guid        char(36) NOT NULL,
                 oncpan      tinyint(4) default 0,
                 distmat     tinyint(4) default 0,
                 perlmat     tinyint(4) default 0,
@@ -111,7 +131,55 @@ sub process {
                 fail        int(10) default 0,
                 na          int(10) default 0,
                 unknown     int(10) default 0
+                PRIMARY KEY (id,guid),
+                INDEX (dist,version)
+            )',
+
+            'DROP TABLE IF EXISTS uploads',
+            'CREATE TABLE uploads (
+              type        varchar(10)     NOT NULL,
+              author      varchar(32)     NOT NULL,
+              dist        varchar(255)    NOT NULL,
+              version     varchar(255)    NOT NULL,
+              filename    varchar(255)    NOT NULL,
+              released    int(16)         NOT NULL,
+              PRIMARY KEY  (author,dist,version)
+            ) ENGINE=MyISAM',
+
+            'DROP TABLE IF EXISTS ixlatest',
+            'CREATE TABLE ixlatest (
+              dist        varchar(255)    NOT NULL,
+              version     varchar(255)    NOT NULL,
+              released    int(16)         NOT NULL,
+              author      varchar(32)     NOT NULL,
+              oncpan      tinyint(4)      DEFAULT 0,
+              PRIMARY KEY  (dist)
+            ) ENGINE=MyISAM',
+
+            'DROP TABLE IF EXISTS summary',
+            'CREATE TABLE summary (
+              type        varchar(8)       NOT NULL,
+              name        varchar(255)     NOT NULL,
+              lastid      int(10) unsigned NOT NULL,
+              dataset     blob,
+              PRIMARY KEY  (type,name)
+            ) ENGINE=MyISAM',
+
+            'DROP TABLE IF EXISTS page_requests',
+            'CREATE TABLE page_requests (
+              type        varchar(8)       NOT NULL,
+              name        varchar(255)     NOT NULL,
+              weight      int(2) unsigned  NOT NULL
+            ) ENGINE=MyISAM',
+
+            'DROP TABLE IF EXISTS osname',
+            'CREATE TABLE osname (
+                id          int(10) unsigned NOT NULL auto_increment,
+                osname      varchar(255),
+                ostitle     varchar(255),
+                PRIMARY KEY (id)
             )'
+            
             ;
 
     $options{CPANSTATS}->do_query($_)  for(@sql);
@@ -120,17 +188,18 @@ sub process {
     push @sql,
             'PRAGMA auto_vacuum = 1',
             'CREATE TABLE cpanstats (
-                        id            INTEGER PRIMARY KEY,
-                        state         TEXT,
-                        postdate      TEXT,
-                        tester        TEXT,
-                        dist          TEXT,
-                        version       TEXT,
-                        platform      TEXT,
-                        perl          TEXT,
-                        osname        TEXT,
-                        osvers        TEXT,
-                        date          TEXT)',
+                id          INTEGER PRIMARY KEY,
+                guid        TEXT,
+                state       TEXT,
+                postdate    TEXT,
+                tester      TEXT,
+                dist        TEXT,
+                version     TEXT,
+                platform    TEXT,
+                perl        TEXT,
+                osname      TEXT,
+                osvers      TEXT,
+                date        TEXT)',
 
             'CREATE INDEX distverstate ON cpanstats (dist, version, state)',
             'CREATE INDEX ixperl ON cpanstats (perl)',
@@ -141,10 +210,29 @@ sub process {
     @sql = ();
     push @sql,
             'PRAGMA auto_vacuum = 1',
-            'CREATE TABLE articles (
-                        id            INTEGER PRIMARY KEY,
-                        article       TEXT)';
-    $options{LITEARTS}->do_query($_)  for(@sql);
+            'DROP TABLE IF EXISTS metabase',
+            'CREATE TABLE metabase (
+                guid        char(36) NOT NULL,
+                id          int(10) unsigned NOT NULL,
+                updated     varchar(32) default NULL,
+                report	    longblob NOT NULL,
+                PRIMARY KEY (guid),
+                INDEX (id),
+                INDEX (updated)
+            )',
+
+            'DROP TABLE IF EXISTS testers_email',
+            'CREATE TABLE testers_email (
+                id          int(10) unsigned NOT NULL auto_increment,
+                resource    varchar(64) NOT NULL,
+                fullname    varchar(255) NOT NULL,
+                email       varchar(255) default NULL,
+                PRIMARY KEY  (id),
+                KEY resource (resource)
+            )'
+            ;
+    
+    $options{METABASE}->do_query($_)  for(@sql);
 }
 
 sub help {
@@ -202,7 +290,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2008 Barbie for Miss Barbell Productions.
+  Copyright (C) 2008-2010 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.

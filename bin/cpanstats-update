@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.08';
+my $VERSION = '0.09';
 
 #----------------------------------------------------------------------------
 
@@ -86,7 +86,7 @@ init_options();
 
 ##### MAIN #####
 
-print "#id,state,postdate,tester,dist,version,platform,perl\n";
+print "#id,guid,state,postdate,tester,dist,version,platform,perl\n";
 my @list = get_list();
 push @list, {id=>$options{id}}    if($options{id});
 

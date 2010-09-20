@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.13';
+my $VERSION = '0.14';
 
 #----------------------------------------------------------------------------
 
@@ -16,9 +16,7 @@ cpanstats-delete - script to delete entries from the cpanstats database.
 
 =head1 DESCRIPTION
 
-Using the cpanstats database, which should in the local directory, extracts
-all the data into the components of each page. Creates the graphs, then
-creates each HTML page of the site.
+Using the cpanstats database, deletes the given entries.
 
 =head1 OPTIONS
 
@@ -30,15 +28,15 @@ Configuration file contain database access details.
 
 =item -a | --all
 
-Delete all the NNTP ids greater than the specified number.
+Delete all the cpanstats report ids greater than the specified number.
 
 =item -d | --delete
 
-Delete a single NNTP id.
+Delete a single cpanstats report id.
 
 =item --file
 
-Named file used when deleting a list of NNTP ids.
+Named file used when deleting a list of cpanstats report ids.
 
 =back
 
@@ -88,7 +86,7 @@ if($options{delete}) {
 
 =item get_list
 
-Returns the list of NNTP ids from the named file.
+Returns the list of cpanstats report ids from the named file.
 
 =cut
 

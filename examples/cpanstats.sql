@@ -2,7 +2,7 @@
 
 DROP TABLE IF EXISTS cpanstats;
 CREATE TABLE cpanstats (
-    id          int(10) unsigned NOT NULL,
+    id          int(10) unsigned NOT NULL auto_increment,
     guid        char(36) NOT NULL,
     state       varchar(32),
     postdate    varchar(8),
@@ -92,19 +92,32 @@ CREATE TABLE `page_requests` (
 
 DROP TABLE IF EXISTS osname;
 CREATE TABLE osname (
-     id         int(10) unsigned NOT NULL auto_increment,
-     osname     varchar(255),
-     ostitle    varchar(255),
-     PRIMARY KEY (id)
+    id          int(10) unsigned NOT NULL auto_increment,
+    osname      varchar(255),
+    ostitle     varchar(255),
+    PRIMARY KEY (id)
 );
 
 
 
-DROP TABLE IF EXISTS fact;
-CREATE TABLE fact (
+DROP TABLE IF EXISTS metabase;
+CREATE TABLE metabase (
     guid        char(36) NOT NULL,
-    type        varchar(36) NOT NULL,
-    meta        blob NOT NULL,
-    content     blob NOT NULL,
-    PRIMARY KEY (guid)
+    id          int(10) unsigned NOT NULL,
+    updated     varchar(32) default NULL,
+    report	    longblob NOT NULL,
+    PRIMARY KEY (guid),
+    INDEX (id),
+    INDEX (updated)
 );
+
+DROP TABLE IF EXISTS `testers_email`;
+CREATE TABLE `testers_email` (
+  `id` int(10) unsigned NOT NULL auto_increment,
+  `resource` varchar(64) NOT NULL,
+  `fullname` varchar(255) NOT NULL,
+  `email` varchar(255) default NULL,
+  PRIMARY KEY  (`id`),
+  KEY `resource` (`resource`)
+);
+

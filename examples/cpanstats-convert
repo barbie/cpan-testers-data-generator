@@ -8,7 +8,7 @@ my $VERSION = '0.01';
 
 =head1 NAME
 
-cpanstats-select - select stats from the CPAN Testers Statistics database.
+cpanstats-convert - select stats from the CPAN Testers Statistics database.
 
 =head1 SYNOPSIS
 

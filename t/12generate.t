@@ -4,30 +4,33 @@ use strict;
 use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
 use CPAN::Testers::Data::Generator;
+use CPAN::Testers::Metabase::AWS;
 use Data::Dumper;
 use File::Path;
 use IO::File;
 use Test::More;
 
 #----------------------------------------------------------------------------
-# Test Conditions
-
-eval "use Test::MockObject";
-if($@) {
-    plan skip_all => 'Need Test::MockObject to do full tests';
-}
-
-#----------------------------------------------------------------------------
 # Test Variables
 
-my (%options,$nomock,$mock1);
+my (%options,$meta);
 my $config = './t/test-config.ini';
-my %articles = (
-    1 => 't/nntp/126015.txt',
-    2 => 't/nntp/125106.txt',
-    3 => 't/nntp/1804993.txt',
-    4 => 't/nntp/1805500.txt',
-);
+my $TESTS = 43;
+
+#----------------------------------------------------------------------------
+# Test Conditions
+
+BEGIN {
+    my $meta = CPAN::Testers::Metabase::AWS->new(
+        bucket      => 'cpantesters',
+        namespace   => 'beta2',
+    );
+
+    if($meta) {
+        # check whether tester has a valid access key
+        $meta = undef   unless($meta->access_key_id());
+    }
+}
 
 #----------------------------------------------------------------------------
 # Test Data
@@ -47,7 +50,8 @@ my @create_sqlite = (
                 perl        TEXT,
                 osname      TEXT,
                 osvers      TEXT,
-                fulldate    TEXT)',
+                fulldate    TEXT,
+                date        TEXT)',
 
             'CREATE INDEX distverstate ON cpanstats (dist, version, state)',
             'CREATE INDEX ixperl ON cpanstats (perl)',
@@ -208,18 +212,40 @@ my @create_mysql = (
             "INSERT INTO osname VALUES (1,'linux','Linux')"
 );
 
-my @create_arts_sqlite = (
+my @create_meta_sqlite = (
             'PRAGMA auto_vacuum = 1',
-            'CREATE TABLE articles (
-                id            INTEGER PRIMARY KEY,
-                article       TEXT)'
+            'CREATE TABLE metabase (
+                id          INTEGER PRIMARY KEY,
+                guid        INTEGER,
+                report      TEXT)',
+            'CREATE INDEX guid ON metabase (guid)',
+
+            'CREATE TABLE `testers_email` (
+                id          INTEGER PRIMARY KEY,
+                resource    TEXT,
+                fullname    TEXT,
+                email       TEXT
+            )',
+            'CREATE INDEX resource ON testers_email (resource)'
 );
 
-my @create_arts_mysql = (
-            'CREATE TABLE articles (
+my @create_meta_mysql = (
+            'CREATE TABLE metabase (
                 id          int(10) unsigned NOT NULL,
-                article     blob,
-                PRIMARY KEY (id)'
+                guid        char(36) NOT NULL,
+                report      blob,
+                PRIMARY KEY (id),
+                INDEX guid (guid)
+            )',
+
+            'CREATE TABLE `testers_email` (
+              id            int(10) unsigned NOT NULL auto_increment,
+              resource      varchar(64) NOT NULL,
+              fullname      varchar(255) NOT NULL,
+              email         varchar(255) default NULL,
+              PRIMARY KEY  (id),
+              KEY resource (resource)
+            )'
 );
 
 my @delete_sqlite = (
@@ -238,12 +264,12 @@ my @delete_mysql = (
             'DELETE FROM ixlatest'
 );
 
-my @delete_arts_sqlite = (
-            'DELETE FROM articles'
+my @delete_meta_sqlite = (
+            'DELETE FROM metabase'
 );
 
-my @delete_arts_mysql = (
-            'DELETE FROM articles'
+my @delete_meta_mysql = (
+            'DELETE FROM metabase'
 );
 
 #----------------------------------------------------------------------------
@@ -257,45 +283,30 @@ mkpath($directory) or die "cannot create directory";
 if(create_db(0)) {
     plan skip_all => 'Cannot create temporary databases';
 } else {
-    plan tests => 50;
+    plan tests => $TESTS;
 }
 
 # continue with testing
-
-BEGIN {
-    eval "use Test::MockObject";
-    $nomock = $@;
-
-    unless($nomock) {
-        $mock1 = Test::MockObject->new();
-        $mock1->fake_module( 'Net::NNTP',
-                    'group' => \&group,
-                    'article' => \&getArticle);
-        $mock1->fake_new( 'Net::NNTP' );
-        $mock1->mock( 'group', \&group );
-        $mock1->mock( 'article', \&getArticle );
-    }
-}
 
 rmtree($directory);
 mkpath($directory);
 
 ok(!-f $directory . '/cpanstats.db', '.. dbs not created yet');
 ok(!-f $directory . '/litestats.db');
-ok(!-f $directory . '/articles.db');
+ok(!-f $directory . '/metabase.db');
 
 is(create_db(0), 0, '.. dbs created');
 
-ok(-f $directory . '/cpanstats.db', '.. dbs files found');
+ok(-f $directory . '/cpanstats.db', '.. dbs created');
 ok(-f $directory . '/litestats.db');
-ok(-f $directory . '/articles.db');
+ok(-f $directory . '/metabase.db');
 
 is(create_db(2), 0, '.. dbs prepped');
 
 ## Test we can generate
 
 SKIP: {
-    skip "Test::MockObject required for testing", 7 if $nomock;
+    skip "Valid S3 access key required for live tests", 7 unless $meta;
     #diag "Testing generate()";
 
     my $t = CPAN::Testers::Data::Generator->new(
@@ -315,25 +326,45 @@ SKIP: {
     # interrogate the contents at a later date :)
     ok(-f $directory . '/cpanstats.db','.. dbs still there');
     ok(-f $directory . '/cpanstats.log');
-    ok(-f $directory . '/articles.db');
+    ok(-f $directory . '/metabase.db');
 
-    my $size = -s $directory . '/articles.db';
+    my $size = -s $directory . '/metabase.db';
 
     # second update should do nothing
     $t->generate;
 
-    is(-s $directory . '/articles.db', $size,'.. db should not change size');
+    is(-s $directory . '/metabase.db', $size,'.. db should not change size');
 
-    is(countRequests(),2,'.. page requests added');
-    is(countReleases(),2,'.. release data entries added');
+    is(countRequests(),1,'.. page requests added');
+    is(countReleases(),1,'.. release data entries added');
 }
+
+# FROM HERE WE DON'T NEED THE INTERNET
+
+# refresh the databases
+
+rmtree($directory);
+mkpath($directory);
+
+ok(!-f $directory . '/cpanstats.db', '.. dbs not created yet');
+ok(!-f $directory . '/litestats.db');
+ok(!-f $directory . '/metabase.db');
+
+is(create_db(0), 0, '.. dbs created');
+
+ok(-f $directory . '/cpanstats.db', '.. dbs created');
+ok(-f $directory . '/litestats.db');
+ok(-f $directory . '/metabase.db');
+
+is(create_db(2), 0, '.. dbs prepped');
+
+# build test metabase
+
+is(create_metabase(0), 0, '.. metabase created');
 
 ## Test we can rebuild
 
-SKIP: {
-    skip "Test::MockObject required for testing", 9 if $nomock;
-    #diag "Testing rebuild()";
-
+{
     my $t = CPAN::Testers::Data::Generator->new(
         config  => $config,
         logfile => $directory . '/cpanstats.log'
@@ -341,13 +372,12 @@ SKIP: {
 
     # everything should still be there
     ok(-f $directory . '/cpanstats.db','.. dbs still there');
-    ok(-f $directory . '/cpanstats.log');
-    ok(-f $directory . '/articles.db');
+    ok(-f $directory . '/metabase.db');
 
     my $size = -s $directory . '/cpanstats.db';
 
-    # delete stats database records
-    create_db(1);
+    # remove stats database entries
+    #create_db(1);
 
     # recreate the stats database
     $t->rebuild;
@@ -362,15 +392,12 @@ SKIP: {
     # check stats database is again the same size as before
     ok(-f $directory . '/cpanstats.db');
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
+    ok(-f $directory . '/cpanstats.log');
 }
-
 
 ## Test we can reparse
 
-SKIP: {
-    skip "Test::MockObject required for testing", 7 if $nomock;
-    #diag "Testing reparse()";
-
+{
     my $t = CPAN::Testers::Data::Generator->new(
         config  => $config,
         logfile => $directory . '/cpanstats.log'
@@ -379,32 +406,21 @@ SKIP: {
     # everything should still be there
     ok(-f $directory . '/cpanstats.db','.. dbs still there');
     ok(-f $directory . '/cpanstats.log');
-    ok(-f $directory . '/articles.db');
+    ok(-f $directory . '/metabase.db');
 
     my $size = -s $directory . '/cpanstats.db';
 
     # recreate the stats database
-    $t->reparse({localonly => 1},1);
-
-    # check stats database is again the same size as before
-    ok(-f $directory . '/cpanstats.db');
-    is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
-
-    # recreate the stats database for specific entries
-    $t->reparse({},4);
+    $t->reparse({localonly => 1},1,4);
 
     # check stats database is again the same size as before
     ok(-f $directory . '/cpanstats.db');
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
 }
 
-
 ## Test we don't reparse anything that doesn't already exist
 
-SKIP: {
-    skip "Test::MockObject required for testing", 10 if $nomock;
-    #diag "Testing reparse()";
-
+{
     my $t = CPAN::Testers::Data::Generator->new(
         config  => $config,
         logfile => $directory . '/cpanstats.log'
@@ -413,74 +429,24 @@ SKIP: {
     # everything should still be there
     ok(-f $directory . '/cpanstats.db','.. dbs still there');
     ok(-f $directory . '/cpanstats.log');
-    ok(-f $directory . '/articles.db');
+    ok(-f $directory . '/metabase.db');
 
     my $size = -s $directory . '/cpanstats.db';
 
-    my $c1 = getArticleCount();
-    deleteArticle(1);
-    my $c2 = getArticleCount();
+    my $c1 = getMetabaseCount();
+    deleteMetabase(1);
+    my $c2 = getMetabaseCount();
     is($c1-1,$c2,'... removed 1 article');
 
     # recreate the stats database locally
     $t->reparse({localonly => 1},1,2);
-    my $c3 = getArticleCount();
+    my $c3 = getMetabaseCount();
     is($c2,$c3,'... no more or less articles');
 
     # check stats database is again the same size as before
     ok(-f $directory . '/cpanstats.db');
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
-
-    # recreate the stats database for specific entries
-    $t->reparse({},0,6,20,100);
-    my $c4 = getArticleCount();
-    is($c2,$c4,'... no more or less articles again');
-
-    # check stats database is again the same size as before
-    ok(-f $directory . '/cpanstats.db');
-    is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
 }
-
-
-## Test we don't store articles
-
-SKIP: {
-    skip "Test::MockObject required for testing", 10 if $nomock;
-    #diag "Testing nostore()";
-
-    # set to not store articles
-    my $t = CPAN::Testers::Data::Generator->new(
-        config  => $config,
-        logfile => $directory . '/cpanstats.log',
-	    nostore     => 1,
-	    ignore      => 1
-    );
-
-    # everything should still be there
-    ok(-f $directory . '/cpanstats.db','.. dbs still there');
-    ok(-f $directory . '/cpanstats.log');
-    ok(-f $directory . '/articles.db');
-
-    my $size = -s $directory . '/articles.db';
-    my $count = getArticleCount();
-    is($count,2,'.. should be 2 records');
-
-    # update should just reduce articles database
-    $t->generate;
-
-    # check everything is still there
-    ok(-f $directory . '/cpanstats.db','.. dbs still there');
-    ok(-f $directory . '/cpanstats.log');
-    ok(-f $directory . '/articles.db');
-
-    my $msize = -s $directory . '/articles.db';
-    my $mcount = getArticleCount();
-
-    cmp_ok($msize, '<=', $size,'.. db should be a smaller size');
-    cmp_ok($mcount, '<=', $count,'.. db should have fewer records');
-    is($mcount,1,'.. should be 1 record');
-}
-
 
 # now clean up!
 rmtree($directory);
@@ -523,7 +489,7 @@ sub create_db {
     if($type == 0) {
         $options{CPANSTATS} = config_db('CPANSTATS')    or return 1;
         $options{LITESTATS} = config_db('LITESTATS')    or return 1;
-        $options{LITEARTS}  = config_db('LITEARTS')     or return 1;
+        $options{METABASE}  = config_db('METABASE')     or return 1;
 
         if($options{CPANSTATS}->{opts}{driver} =~ /sqlite/i)    { create_file('CPANSTATS')                  and return 1;
                                                                   dosql('CPANSTATS',\@create_sqlite)        and return 1; }
@@ -531,9 +497,9 @@ sub create_db {
         if($options{LITESTATS}->{opts}{driver} =~ /sqlite/i)    { create_file('LITESTATS')                  and return 1;
                                                                   dosql('LITESTATS',\@create_sqlite)        and return 1; }
         else                                                    { dosql('LITESTATS',\@create_mysql)         and return 1; }
-        if($options{LITEARTS}->{opts}{driver} =~ /sqlite/i)     { create_file('LITEARTS')                   and return 1;
-                                                                  dosql('LITEARTS', \@create_arts_sqlite)   and return 1; }
-        else                                                    { dosql('LITEARTS', \@create_arts_mysql)    and return 1; }
+        if($options{METABASE}->{opts}{driver} =~ /sqlite/i)     { create_file('METABASE')                   and return 1;
+                                                                  dosql('METABASE', \@create_meta_sqlite)   and return 1; }
+        else                                                    { dosql('METABASE', \@create_meta_mysql)    and return 1; }
     }
     
     if($type < 3) {
@@ -544,8 +510,8 @@ sub create_db {
     }
 
     if($type > 1) {
-        if($options{LITEARTS}->{opts}{driver} =~ /sqlite/i)     { dosql('LITEARTS', \@delete_arts_sqlite)   and return 1; }
-        else                                                    { dosql('LITEARTS', \@delete_arts_mysql)    and return 1; }
+        if($options{METABASE}->{opts}{driver} =~ /sqlite/i)     { dosql('METABASE', \@delete_meta_sqlite)   and return 1; }
+        else                                                    { dosql('METABASE', \@delete_meta_mysql)    and return 1; }
     }
 
     return 0;
@@ -566,6 +532,11 @@ sub dosql {
         eval { $options{$db}->{dbh}->do_query($_); };
         if($@) {
             diag $@;
+            for my $i (1..5) {
+                my @calls = caller($i);
+                last    unless(@calls);
+                diag " => CALLER($calls[1],$calls[2])";
+            }
             return 1;
         }
     }
@@ -573,35 +544,46 @@ sub dosql {
     return 0;
 }
 
-sub group {
-    return(4,1,4);
-}
+sub create_metabase {
+    my @guids = map {s!.*/(.*?).json$!$1!; $_} glob('t/data/*.json');
+    #diag "create_metabase: guids=@guids";
 
-sub getArticle {
-    my ($self,$id) = @_;
-    my @text;
+    for my $guid (@guids) {
+        #diag "create_metabase: guid=$guid";
 
-    my $fh = IO::File->new($articles{$id}) or return \@text;
-    while(<$fh>) { push @text, $_ }
+        my $text;
+        my $fh = IO::File->new("t/data/$guid.json") or return 1;
+        while(<$fh>) { $text .= $_ }
+        $fh->close;
+
+        $options{'METABASE'}->{dbh}->do_query('INSERT INTO metabase (guid,report) VALUES (?,?)',$guid,$text);
+    }
+
+    my $fh = IO::File->new("t/data/testers.csv") or return 1;
+    while(<$fh>) {
+        chomp;
+        my @fields = split(',',$_);
+        $options{'METABASE'}->{dbh}->do_query('INSERT INTO testers_email (id,resource,fullname,email) VALUES (?,?,?,?)',@fields);
+    }
     $fh->close;
 
-    return \@text;
+    return 0;
 }
 
-sub getArticleCount {
-    $options{LITEARTS} ||= config_db('LITEARTS');
+sub getMetabaseCount {
+    $options{METABASE} ||= config_db('METABASE');
 
-    my @rows = $options{LITEARTS}->{dbh}->get_query('array','SELECT count(id) FROM articles');
+    my @rows = $options{METABASE}->{dbh}->get_query('array','SELECT count(id) FROM metabase');
     return 0	unless(@rows);
     return $rows[0]->[0] || 0;
 }
 
-sub deleteArticle {
+sub deleteMetabase {
     my $id = shift;
 
-    $options{LITEARTS} ||= config_db('LITEARTS');
-    my @rows = $options{LITEARTS}->{dbh}->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
-    $options{LITEARTS}->{dbh}->do_query('DELETE FROM articles WHERE id = ?',$id)    if(@rows);
+    $options{METABASE} ||= config_db('METABASE');
+    my @rows = $options{METABASE}->{dbh}->get_query('array','SELECT * FROM metabase WHERE id = ?',$id);
+    $options{METABASE}->{dbh}->do_query('DELETE FROM metabase WHERE id = ?',$id)    if(@rows);
 }
 
 sub countRequests {

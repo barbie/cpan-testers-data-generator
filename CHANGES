@@ -1,5 +1,27 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+1.00    current
+	- redesigned to use Metabase. All NNTP references removed.
+	- removed ignore and nostore options.
+	- added nonstop option.
+	- added error report mail alert, to highlight problems quickly
+	- improved validation of metabase results, due to the search sometimes 
+	  returning older reports!
+	- improved retrieval of tester fact
+	- scripts removed:
+	    bin/articles-verify
+	    bin/articles-view
+            bin/cpanstats-reparse
+            bin/cpanstats-verify
+	    examples/cpanstats-convert
+	- added guid command line options and/or output:
+            bin/cpanstats-select		(v0.11)
+            bin/cpanstats-update		(v0.09)
+            bin/cpanstats-delete		(v0.14)
+	- major update of all SQL tables and databases
+            examples/cpanstats-createdb		(v0.02)
+	- added META.json
+
 0.41    18/03/2010
 	- fixes to change the 'id' (was NNTP ID) to an auto incremental field.
 	- reworked logic to better fit latest changes.

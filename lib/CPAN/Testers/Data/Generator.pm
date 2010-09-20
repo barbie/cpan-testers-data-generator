@@ -2,21 +2,55 @@ package CPAN::Testers::Data::Generator;
 
 use warnings;
 use strict;
-use vars qw($VERSION);
 
-$VERSION = '0.41';
+use vars qw($VERSION);
+$VERSION = '1.00';
 
 #----------------------------------------------------------------------------
 # Library Modules
 
 use Config::IniFiles;
-use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
-use CPAN::Testers::Common::Utils    qw(nntp_to_guid);
 use File::Basename;
 use File::Path;
 use IO::File;
-use Net::NNTP;
+use JSON;
+use Time::Local;
+
+use Metabase    0.004;
+use Metabase::Fact;
+use CPAN::Testers::Fact::LegacyReport;
+use CPAN::Testers::Fact::TestSummary;
+use CPAN::Testers::Metabase::AWS;
+use CPAN::Testers::Report;
+
+#----------------------------------------------------------------------------
+# Variables
+
+my %testers;
+
+my $FROM    = 'CPAN Tester Report Server <do_not_reply@cpantesters.org>';
+my $HOW     = '/usr/sbin/sendmail -bm';
+my $HEAD    = 'To: EMAIL
+From: FROM
+Date: DATE
+Subject: CPAN Testers Generator Error Report
+
+';
+
+my $BODY    = '
+The following reports failed to parse into the cpanstats database:
+
+INVALID
+
+Thanks,
+CPAN Testers Server.
+';
+
+my @admins = (
+    'barbie@missbarbell.co.uk',
+    #'david@dagolden.com'
+);
 
 #----------------------------------------------------------------------------
 # The Application Programming Interface
@@ -25,27 +59,40 @@ sub new {
     my $class = shift;
     my %hash  = @_;
 
-    my $self = {};
+    my $self = {
+        meta_count  => 0,
+        stat_count  => 0,
+        last        => '',
+    };
     bless $self, $class;
 
     # load configuration
     my $cfg = Config::IniFiles->new( -file => $hash{config} );
 
     # configure databases
-    for my $db (qw(CPANSTATS LITESTATS LITEARTS)) {
+    for my $db (qw(CPANSTATS LITESTATS)) {
         die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
         my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
         $opts{AutoCommit} = 0;
         $self->{$db} = CPAN::Testers::Common::DBUtils->new(%opts);
         die "Cannot configure $db database\n" unless($self->{$db});
+        $self->{$db}->{'mysql_enable_utf8'} = 1 if($opts{driver} =~ /mysql/i);
     }
 
     # command line swtiches override configuration settings
-    for my $key (qw(ignore nostore logfile)) {
+    for my $key (qw(logfile poll_limit stopfile offset)) {
         $self->{$key} = $hash{$key} || $cfg->val('MAIN',$key);
     }
 
-    my @rows = $self->{CPANSTATS}->get_query('array',q{SELECT osname,ostitle FROM osname});
+    $self->{offset}     ||= 1;
+    $self->{poll_limit} ||= 1000;
+
+    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT * FROM metabase.testers_email');
+    for my $row (@rows) {
+        $testers{$row->{resource}} = $row->{email};
+    }
+
+    @rows = $self->{CPANSTATS}->get_query('array','SELECT osname,ostitle FROM osname');
     for my $row (@rows) {
         $self->{OSNAMES}{lc $row->[0]} ||= $row->[1];
     }
@@ -55,7 +102,11 @@ sub new {
         $self->{DISABLE}{$_} = 1    for(@values);
     }
 
-    ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last}) = (0,0,0);
+    $self->{metabase} = CPAN::Testers::Metabase::AWS->new(
+        bucket      => 'cpantesters',
+        namespace   => 'beta2',
+    );
+    $self->{librarian} = $self->{metabase}->public_librarian;
 
     return $self;
 }
@@ -68,116 +119,170 @@ sub DESTROY {
 # Public Methods
 
 sub generate {
-    my $self = shift;
+    my $self    = shift;
+    my $nonstop = shift || 0;
 
-    $self->{nntp}  ||= $self->nntp_connect();
+$self->_log("START nonstop=$nonstop\n");
 
-    my $start = $self->_get_lastid() +1;
-    my $end   = $self->{nntp_last};
-    die "Cannot access NNTP server\n"   unless($end);   # better to bail out than fade away!
+    do {
 
-    # starting from last retrieved article
-    for(my $id = $start; $id <= $end; $id++) {
+    my ($processed,$stored,$cached) = (0,0,0);
+    my $start = localtime(time);
 
-        $self->_log("ID [$id]");
-        my $article = join "", @{$self->{nntp}->article($id) || []};
+    my $guids = $self->get_next_guids();
+    if($guids) {
+        for my $guid (@$guids) {
+            $self->_log("GUID [$guid]");
+            $processed++;
 
-        # no article for that id!
-        unless($article) {
-            $self->_log(" ... no article\n");
-            if($self->{ignore}) {
-                next;
+            #if($self->already_saved($guid)) {
+            #    $self->_log(".. already saved\n");
+            #    next;
+            #}
+
+            if(my $report = $self->get_fact($guid)) {
+                $self->{report}{guid}   = $guid;
+                next    if($self->parse_report(report => $report));
+
+                if($self->store_report()) { $self->_log(".. stored"); $stored++; }
+                else                      {
+                    if($self->{time} gt $self->{report}{updated}) {
+                        $self->_log(".. FAIL: older than requested [$self->{time}]\n");
+                        next;
+                    }
+                    $self->_log(".. already stored");
+                }
+                if($self->cache_report()) { $self->_log(".. cached\n"); $cached++; }
+                else                      { $self->_log(".. already cached\n"); }
             } else {
-                die "No article returned [$id]\n";
+                $self->_log(".. FAIL\n");
             }
         }
-
-        $self->parse_article($id,$article);
-        next    unless($self->{article}{guid});
-        $self->cache_report();
-        $self->store_report();
     }
 
-    $self->cleanup  if($self->{nostore});
     $self->commit();
+    my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
+    my $stop = localtime(time);
+    $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
+
+    # only email invalid reports during the generate process
+    if($self->{invalid}) {
+        my $DATE = $self->_emaildate();
+        $DATE =~ s/\s+$//;
+        my $INVALID = join("\n",@{$self->{invalid}});
+        $self->_log("INVALID:\n$INVALID\n");
+
+        for my $admin (@admins) {
+            my $cmd = qq!| $HOW $admin!;
+
+            my $body = $HEAD . $BODY;
+            $body =~ s/FROM/$FROM/g;
+            $body =~ s/EMAIL/$admin/g;
+            $body =~ s/DATE/$DATE/g;
+            $body =~ s/INVALID/$INVALID/g;
+
+            if(my $fh = IO::File->new($cmd)) {
+                print $fh $body;
+                $fh->close;
+                $self->_log(".. MAIL SEND - SUCCESS - $admin\n");
+            } else {
+                $self->_log(".. MAIL SEND - FAILED - $admin\n");
+            }
+        }
+    }
+
+    $nonstop = 0	if($processed == 0);
+    $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
+
+$self->_log("CHECK nonstop=$nonstop\n");
+    } while($nonstop);
+$self->_log("STOP nonstop=$nonstop\n");
 }
 
-
 sub rebuild {
-    my ($self,$start,$end) = @_;
+    my ($self,%hash) = @_;
+    $self->{reparse} = 1;
+    my ($processed,$stored,$cached) = (0,0,0);
+    my $start = localtime(time);
 
-    $start ||= 1;
-    $end   ||= $self->_get_lastid();
+$self->_log("START REBUILD\n");
 
-    $self->{CPANSTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
-    $self->{LITESTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
+    # selection choices:
+    # 1) from guid [to guid]
+    # 2) from date [to date]
 
-    my $iterator = $self->{LITEARTS}->iterator('array',"SELECT * FROM articles WHERE id >= $start AND id <= $end ORDER BY id asc");
+    $hash{dstart} = $self->_get_createdate( $hash{gstart}, $hash{dstart} );
+    $hash{dend}   = $self->_get_createdate( $hash{gend},   $hash{dend} );
+
+    my @where;
+    push @where, "updated >= $hash{dstart}"  if($hash{dstart});
+    push @where, "updated <= $hash{dend}"    if($hash{dend});
+    
+    my $sql =   'SELECT * FROM metabase.metabase' . 
+                (@where ? ' WHERE ' . join(' AND ',@where) : '') .
+                ' ORDER BY updated asc';
+
+#    $self->{CPANSTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
+#    $self->{LITESTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
+
+    my $iterator = $self->{CPANSTATS}->iterator('hash',$sql);
     while(my $row = $iterator->()) {
-        my $id = $row->[0];
-	    my $article = $row->[1];
-
-        $self->_log("ID [$id]");
+        $self->_log("GUID [$guid]");
+        $processed++;
 
         # no article for that id!
-        unless($article) {
-            $self->_log(" ... no article\n");
-            if($self->{ignore}) {
-                next;
-            } else {
-                die "No article returned [$id]\n";
-            }
+        unless($row->{report}) {
+            $self->_log(" ... no report\n");
+            warn "No report returned [$row->{id},$row->{guid}]\n";
+            next;
         }
 
-        $self->parse_article($id,$article);
-        next    unless($self->{article}{guid});
+        $self->{report}{id}       = $row->{id};
+        $self->{report}{guid}     = $row->{guid};
+        $self->{report}{metabase} = decode_json($row->{report});
+        $self->reparse_report();
         $self->store_report();
+        $self->cache_update();
+        $self->_log(".. stored\n");
+
+        $stored++;
+        $cached++;
     }
 
+    my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
+    my $stop = localtime(time);
+    $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
+
     $self->commit();
+$self->_log("STOP REBUILD\n");
 }
 
 sub reparse {
-    my ($self,$options,@ids) = @_;
-    return  unless(@ids);
+    my ($self,$guid) = @_;
+    return  unless($guid);
 
-    $self->{nntp}  ||= $self->nntp_connect()
-        unless($options && $options->{localonly});
+    $self->{reparse} = 1;
 
-    my $last = $self->_get_lastid();
-
-    for my $id (@ids) {
-        #print STDERR "id=[$id], last=[$last]\n";
-        next    if($id < 1 || ($id > $last && $id > $self->{nntp_last}));
-
-        my $save_article = 0;
-        my $article;
-        my @rows = $self->{LITEARTS}->get_query('array','SELECT * FROM articles WHERE id = ?',$id);
-        if(@rows) {
-            $article = $rows[0]->[1];
-            #print STDERR "got article\n";
-
-        } elsif($options && $options->{localonly}) {
-            #print STDERR "no article locally\n";
-            next;
-
-        } else {
-            $article = join "", @{$self->{nntp}->article($id) || []};
-            #print STDERR "got NNTP article\n";
-            $save_article = 1;
+    if(my $report = $self->get_fact($guid)) {
+        $self->{report}{guid} = $guid;
+        if($self->parse_report(report => $report)) {
+            $self->_log(".. cannot parse report\n");
+            return;
         }
 
-        next    unless($article);
-        $self->_log("ID [$id]");
-
-        $self->parse_article($id,$article,$options);
-        next    if($options && $options->{check});
-        next    unless($self->{article}{guid});
-
-        $self->{CPANSTATS}->do_query('DELETE FROM cpanstats WHERE guid = ?',$self->{article}{guid});
-        $self->{LITESTATS}->do_query('DELETE FROM cpanstats WHERE guid = ?',$self->{article}{guid});
-        $self->cache_report() if($save_article);
-        $self->store_report();
+        if($self->store_report()) { $self->_log(".. stored"); }
+        else                      {
+            if($self->{time} gt $self->{report}{updated}) {
+                $self->_log(".. FAIL: older than requested [$self->{time}]\n");
+                return;
+            }
+            $self->_log(".. already stored");
+        }
+        if($self->cache_report()) { $self->_log(".. cached\n"); }
+        else                      { $self->_log(".. already cached\n"); }
+    } else {
+        $self->_log(".. FAIL\n");
+        return;
     }
 
     $self->commit();
@@ -186,182 +291,391 @@ sub reparse {
 #----------------------------------------------------------------------------
 # Private Methods
 
-sub cleanup {
-    my $self = shift;
-    my $id = $self->_get_lastid();
-    return  unless($id);
-
-    $self->{LITEARTS}->do_query('DELETE FROM articles WHERE id < ?',$id);
-}
-
 sub commit {
     my $self = shift;
-    for(qw(CPANSTATS LITESTATS LITEARTS)) {
+    for(qw(CPANSTATS LITESTATS)) {
         next    unless($self->{$_});
         $self->{$_}->do_commit;
     }
 }
 
-sub nntp_connect {
+sub get_next_guids {
     my $self = shift;
+    my $guids;
 
-    # connect to NNTP server
-    my $nntp = Net::NNTP->new("nntp.perl.org") or die "Cannot connect to NNTP server [nntp.perl.org]\n";
-    ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last}) = $nntp->group("perl.cpan.testers");
+    my $time;
 
-    #print STDERR "NNTP: (num,first,last) = ($self->{nntp_num}, $self->{nntp_first}, $self->{nntp_last})\n";
+    my @rows = $self->{CPANSTATS}->get_query('array','SELECT max(updated) FROM metabase.metabase');
+    $self->{time} = $rows[0]->[0]	if(@rows);
 
-    return $nntp;
+    #my @rows = $self->{CPANSTATS}->get_query('hash','SELECT max(created) FROM metabase.metabase BY id DESC LIMIT 1');
+    #if(@rows) {
+    #    my $report;
+    #    eval { $report = decode_json($rows[0]->{report}); };
+    #    if($@) {
+    #        $self->_log(" ... Metabase Local Cache Failed [$@]\n") if($@);
+    #        return
+    #    }
+    #    $time = $report->{'CPAN::Testers::Fact::TestSummary'}{metadata}{core}{update_time};
+    #}
+
+    $self->{time} ||= '1999-01-01T00:00:00Z';
+    if($self->{last} ge $self->{time}) {
+        my @ts = $self->{last} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+        $ts[1]--;
+        my $ts = timelocal(reverse @ts);
+        @ts = localtime($ts + $self->{offset}); # increment the offset for next time
+        $self->{time} = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $ts[5]+1900,$ts[4]+1,$ts[3], $ts[2],$ts[1],$ts[0];
+    }
+    $self->_log("START time=[$self->{time}], last=[$self->{last}]\n");
+    $self->{last} = $self->{time};
+
+    #$self->{metabase} = CPAN::Testers::Metabase::AWS->new(
+    #    bucket      => 'cpantesters',
+    #    namespace   => 'beta2',
+    #);
+    #$self->{librarian} = $self->{metabase}->public_librarian;
+
+    eval {
+    	$guids = $self->{librarian}->search(
+        	'core.type'         => 'CPAN-Testers-Report',
+        	'core.update_time'  => { ">=", $self->{time} },
+        	'-asc'              => 'core.update_time',
+        	'-limit'            => $self->{poll_limit},
+    	);
+    };
+
+    $self->_log(" ... Metabase Search Failed [$@]\n") if($@);
+    #if($guids) {
+        $self->_log("START guids=[".scalar(@$guids)."]\n");
+    #}
+
+    return $guids;
 }
 
-sub parse_article {
-    my ($self,$id,$article,$options) = @_;
+sub already_saved {
+    my ($self,$guid) = @_;
+    my @rows = $self->{CPANSTATS}->get_query('array','SELECT id FROM metabase WHERE guid=?',$guid);
+    return 1	if(@rows);
+    return 0;
+}
 
-    $self->{article} = { article => $article };
-    my $object = CPAN::Testers::Common::Article->new($article);
+sub get_fact {
+    my ($self,$guid) = @_;
+    my $fact;
+    #print STDERR "guid=$guid\n";
+    eval { $fact = $self->{librarian}->extract( $guid ) };
+    return $fact    if($fact);
 
-    unless($object) {
-        $self->_log(" ... bad parse\n");
-        return;
-    }
+    $self->_log(" ... no report [$@]\n");
+    return;
+}
 
-    $self->{article}{subject} = $object->subject;
-    $self->{article}{from}    = $object->from;
-    $self->_log(" [$self->{article}{from}] $self->{article}{subject}\n");
-    return    if($self->{article}{subject} =~ /Re:/i);
+sub parse_report {
+    my ($self,%hash) = @_;
+    my $options = $hash{options};
+    my $report  = $hash{report};
+    my $guid    = $self->{report}{guid};
+    my $invalid;
 
-    unless($self->{article}{subject} =~ /(CPAN|FAIL|PASS|NA|UNKNOWN)\s+/i) {
-        $self->_log(" . [$id] ... bad subject\n");
-        return;
-    }
+    $self->{report}{created} = $report->{metadata}{core}{creation_time};
+    $self->{report}{updated} = $report->{metadata}{core}{update_time};
 
-    $self->{article}{state} = lc $1;
+    my @facts = $report->facts();
+    for my $fact (@facts) {
+        if(ref $fact eq 'CPAN::Testers::Fact::TestSummary') {
+            $self->{report}{metabase}{'CPAN::Testers::Fact::TestSummary'} = $fact->as_struct ;
 
-    if($self->{article}{state} eq 'cpan') {
-        $self->{article}{type} = 1;
-        if($object->parse_upload()) {
-            $self->{article}{dist}       = $object->distribution;
-            $self->{article}{version}    = $object->version;
-            $self->{article}{from}       = $object->author;
-            $self->{article}{type}       = 1;
+            $self->{report}{state}      = lc $fact->{content}{grade};
+            $self->{report}{platform}   = $fact->{content}{archname};
+            $self->{report}{osname}     = $self->_osname($fact->{content}{osname});
+            $self->{report}{osvers}     = $fact->{content}{osversion};
+            $self->{report}{perl}       = $fact->{content}{perl_version};
+            #$self->{report}{created}    = $fact->{metadata}{core}{creation_time};
+            #$self->{report}{updated}    = $fact->{metadata}{core}{update_time};
+
+            my $dist                    = Metabase::Resource->new( $fact->resource );
+            $self->{report}{dist}       = $dist->metadata->{dist_name};
+            $self->{report}{version}    = $dist->metadata->{dist_version};
+
+            $self->{report}{from}       = $self->_get_tester( $fact->creator->resource );
+
+            # alternative API
+            #my $profile                 = $fact->creator->user;                                                                                                                                                                          
+            #$self->{report}{from}       = $profile->{email};
+            #$self->{report}{from}       =~ s/'/''/g; #'
+            #$self->{report}{dist}       = $fact->resource->dist_name;                                                                                                                                                                 
+            #$self->{report}{version}    = $fact->resource->dist_version;          
+
+        } elsif(ref $fact eq 'CPAN::Testers::Fact::LegacyReport') {
+            $self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'} = $fact->as_struct;
+            $invalid = 'missing textreport' if(length $fact->{content}{textreport} < 10);   # what is the smallest report?
+
+            $self->{report}{perl}       = $fact->{content}{perl_version};
         }
+    }
 
-        return  unless($self->_valid_field($id, 'dist'    => $self->{article}{dist})     || ($options && $options->{exclude}{dist}));
-        return  unless($self->_valid_field($id, 'version' => $self->{article}{version})  || ($options && $options->{exclude}{version}));
-        return  unless($self->_valid_field($id, 'author'  => $self->{article}{from})     || ($options && $options->{exclude}{from}));
+    if($invalid) {
+        push @{$self->{invalid}}, {msg => $invalid, guid => $guid};
+        return 1;
+    }
 
+    if($self->{report}{created}) {
+        my @created = $self->{report}{created} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/; # 2010-02-23T20:33:52Z
+        $self->{report}{postdate}   = sprintf "%04d%02d", $created[0], $created[1];
+        $self->{report}{fulldate}   = sprintf "%04d%02d%02d%02d%02d", $created[0], $created[1], $created[2], $created[3], $created[4];
     } else {
-        $self->{article}{type} = 2;
-        if($object->parse_report()) {
-            $self->{article}{dist}       = $object->distribution;
-            $self->{article}{version}    = $object->version;
-            $self->{article}{from}       = $object->from;
-            $self->{article}{perl}       = $object->perl;
-            $self->{article}{platform}   = $object->archname;
-            $self->{article}{osname}     = $self->_osname($object->osname);
-            $self->{article}{osvers}     = $object->osvers;
-            $self->{article}{from}       =~ s/'/''/g; #'
-        }
-
-        if($self->{DISABLE} && $self->{DISABLE}{$self->{article}{from}}) {
-            $self->{article}{state} .= ':invalid';
-            $self->{article}{type} = 3;
-        }
-
-        return  unless($self->_valid_field($id, 'dist'     => $self->{article}{dist})        || ($options && $options->{exclude}{dist}));
-        return  unless($self->_valid_field($id, 'version'  => $self->{article}{version})     || ($options && $options->{exclude}{version}));
-        return  unless($self->_valid_field($id, 'from'     => $self->{article}{from})        || ($options && $options->{exclude}{from}));
-        return  unless($self->_valid_field($id, 'perl'     => $self->{article}{perl})        || ($options && $options->{exclude}{perl}));
-        return  unless($self->_valid_field($id, 'platform' => $self->{article}{platform})    || ($options && $options->{exclude}{platform}));
-        return  unless($self->_valid_field($id, 'osname'   => $self->{article}{osname})      || ($options && $options->{exclude}{osname}));
-        return  unless($self->_valid_field($id, 'osvers'   => $self->{article}{osvers})      || ($options && $options->{exclude}{osname}));
+        my @created = localtime(time);
+        $self->{report}{postdate}   = sprintf "%04d%02d", $created[5]+1900, $created[4]+1;
+        $self->{report}{fulldate}   = sprintf "%04d%02d%02d%02d%02d", $created[5]+1900, $created[4]+1, $created[3], $created[2], $created[1];
     }
 
-    $self->{article}{nntp} = $id;
-    $self->{article}{guid} = nntp_to_guid($id);
-    $self->{article}{post} = $object->postdate;
-    $self->{article}{date} = $object->date;
+$self->_log(".. time [$self->{report}{created}][$self->{report}{updated}]");
+
+    $self->{report}{type}       = 2;
+    if($self->{DISABLE} && $self->{DISABLE}{$self->{report}{from}}) {
+        $self->{report}{state} .= ':invalid';
+        $self->{report}{type}   = 3;
+    }
+
+    #use Data::Dumper;
+    #print STDERR "\n====\nreport=".Dumper($self->{report});
+
+    return 1  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));
+    return 1  unless($self->_valid_field($guid, 'version'  => $self->{report}{version})  || ($options && $options->{exclude}{version}));
+    return 1  unless($self->_valid_field($guid, 'from'     => $self->{report}{from})     || ($options && $options->{exclude}{from}));
+    return 1  unless($self->_valid_field($guid, 'perl'     => $self->{report}{perl})     || ($options && $options->{exclude}{perl}));
+    return 1  unless($self->_valid_field($guid, 'platform' => $self->{report}{platform}) || ($options && $options->{exclude}{platform}));
+    return 1  unless($self->_valid_field($guid, 'osname'   => $self->{report}{osname})   || ($options && $options->{exclude}{osname}));
+    return 1  unless($self->_valid_field($guid, 'osvers'   => $self->{report}{osvers})   || ($options && $options->{exclude}{osname}));
+
+    return 0
+}
+
+sub reparse_report {
+    my ($self,%hash) = @_;
+    my $fact = 'CPAN::Testers::Fact::TestSummary';
+    my $options = $hash{options};
+    my $report  = CPAN::Testers::Fact::TestSummary->from_struct( $self->{report}{metabase}{$fact} );
+    my $guid    = $self->{report}{guid};
+
+    $self->{report}{state}      = lc $report->{content}{grade};
+    $self->{report}{platform}   = $report->{content}{archname};
+    $self->{report}{osname}     = $self->_osname($report->{content}{osname});
+    $self->{report}{osvers}     = $report->{content}{osversion};
+    $self->{report}{perl}       = $report->{content}{perl_version};
+    $self->{report}{created}    = $report->{metadata}{core}{creation_time};
+
+    my $dist                    = Metabase::Resource->new( $report->{metadata}{core}{resource} );
+    $self->{report}{dist}       = $dist->metadata->{dist_name};
+    $self->{report}{version}    = $dist->metadata->{dist_version};
+
+    $self->{report}{from}       = $self->_get_tester( $report->{metadata}{core}{creator}{resource} );
+
+    if($self->{report}{created}) {
+        my @created = $self->{report}{created} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/; # 2010-02-23T20:33:52Z
+        $self->{report}{postdate}   = sprintf "%04d%02d", $created[0], $created[1];
+        $self->{report}{fulldate}   = sprintf "%04d%02d%02d%02d%02d", $created[0], $created[1], $created[2], $created[3], $created[4];
+    } else {
+        my @created = localtime(time);
+        $self->{report}{postdate}   = sprintf "%04d%02d", $created[5]+1900, $created[4]+1;
+        $self->{report}{fulldate}   = sprintf "%04d%02d%02d%02d%02d", $created[5]+1900, $created[4]+1, $created[3], $created[2], $created[1];
+    }
+
+    $self->{report}{type}       = 2;
+    if($self->{DISABLE} && $self->{DISABLE}{$self->{report}{from}}) {
+        $self->{report}{state} .= ':invalid';
+        $self->{report}{type}   = 3;
+    }
+
+    return  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));
+    return  unless($self->_valid_field($guid, 'version'  => $self->{report}{version})  || ($options && $options->{exclude}{version}));
+    return  unless($self->_valid_field($guid, 'from'     => $self->{report}{from})     || ($options && $options->{exclude}{from}));
+    return  unless($self->_valid_field($guid, 'perl'     => $self->{report}{perl})     || ($options && $options->{exclude}{perl}));
+    return  unless($self->_valid_field($guid, 'platform' => $self->{report}{platform}) || ($options && $options->{exclude}{platform}));
+    return  unless($self->_valid_field($guid, 'osname'   => $self->{report}{osname})   || ($options && $options->{exclude}{osname}));
+    return  unless($self->_valid_field($guid, 'osvers'   => $self->{report}{osvers})   || ($options && $options->{exclude}{osname}));
 }
 
 sub store_report {
-    my ($self) = @_;
+    my $self = shift;
 
-    my @fields = map {$self->{article}{$_}} qw(guid state post from dist version platform perl osname osvers date type);
+    my @fields = map {$self->{report}{$_}} qw(guid state postdate from dist version platform perl osname osvers fulldate type);
     $fields[$_] ||= 0   for(11);
     $fields[$_] ||= ''  for(0,1,2,3,4,5,6,7,8,9,10);
     $fields[$_] ||= '0' for(7);
 
-    my %INSERT = (
-        CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-        LITESTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    my %SQL = (
+        'SELECT' => {
+            CPANSTATS => 'SELECT id FROM cpanstats WHERE guid=?',
+            LITESTATS => 'SELECT id FROM cpanstats WHERE guid=?',
+            RELEASE   => 'SELECT id FROM release_date WHERE guid=?',
+        },
+        'INSERT' => {
+            CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            LITESTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,date,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            RELEASE   => 'INSERT INTO release_data (id,guid,dist,version,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        },
+        'UPDATE' => {
+            CPANSTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
+            LITESTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
+            RELEASE   => 'UPDATE release_data SET id=?,dist=?,version=?,oncpan=?,distmat=?,perlmat=?,patched=?,pass=?,fail=?,na=?,unknown=? WHERE guid=?',
+        },
     );
 
-    my @rows = $self->{CPANSTATS}->get_query('array','SELECT * FROM cpanstats WHERE guid=?',$fields[0]);
-    return  if(@rows);
+    # update the mysql database
+    my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{CPANSTATS},$fields[0]);
+    if(@rows) {
+        if($self->{reparse}) {
+            my ($guid,@update) = @fields;
+            $self->{CPANSTATS}->do_query($SQL{UPDATE}{CPANSTATS},@update,$guid);
+        } else {
+            $self->{report}{id} = $rows[0]->[0];
+            return 0;
+        }
+    } else {
+        $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{CPANSTATS},@fields);
+    }
 
-    $self->{article}{id} = $self->{CPANSTATS}->id_query($INSERT{CPANSTATS},@fields);
+    # update the sqlite database
+    @rows = $self->{LITESTATS}->get_query('array',$SQL{SELECT}{LITESTATS},$fields[0]);
+    if(@rows) {
+        if($self->{reparse}) {
+            my ($guid,@update) = @fields;
+            $self->{LITESTATS}->do_query($SQL{UPDATE}{LITESTATS},@update,$guid);
+        }
+    } else {
+        $self->{LITESTATS}->do_query($SQL{INSERT}{LITESTATS},$self->{report}{id},@fields);
+    }
 
-    @rows = $self->{LITESTATS}->get_query('array','SELECT * FROM cpanstats WHERE guid=?',$fields[0]);
-    $self->{LITESTATS}->do_query($INSERT{LITESTATS},$self->{article}{id},@fields)   unless(@rows);
-
-    # only valid reports    
-    if($self->{article}{type} == 2) {
-        unshift @fields, $self->{article}{id};
+    # only valid reports
+    if($self->{report}{type} == 2) {
+        unshift @fields, $self->{report}{id};
 
         # push page requests
         # - note we only update the author if this is the *latest* version of the distribution
-        my $author = $self->_get_author($fields[5],$fields[6]);
+        my $author = $self->{report}{pauseid} || $self->_get_author($fields[5],$fields[6]);
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
 
-        $self->{CPANSTATS}->do_query(
-            'INSERT INTO release_data ' . 
-            '(dist,version,id,guid,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) ' .
-            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields[0]);
+        if(@rows) {
+            if($self->{reparse}) {
+                $self->{CPANSTATS}->do_query($SQL{UPDATE}{RELEASE},
+                    $fields[0],             # id,
+                    $fields[5],$fields[6],  # dist, version
 
-            $fields[5],$fields[6],$fields[0],$fields[1],
+                    $self->_oncpan($fields[5],$fields[6])   ? 1 : 2,
 
-            $self->_oncpan($fields[5],$fields[6]) ? 1 : 2,
+                    $fields[6] =~ /_/                       ? 2 : 1,
+                    $fields[8] =~ /^5.(7|9|[1-9][13579])/   ? 2 : 1,    # odd numbers now mark development releases
+                    $fields[8] =~ /(RC\d+|patch)/           ? 2 : 1,
 
-            $fields[6] =~ /_/           ? 2 : 1,
-            $fields[8] =~ /^5.(7|9|11)/ ? 2 : 1,
-            $fields[8] =~ /patch/       ? 2 : 1,
+                    $fields[2] eq 'pass'    ? 1 : 0,
+                    $fields[2] eq 'fail'    ? 1 : 0,
+                    $fields[2] eq 'na'      ? 1 : 0,
+                    $fields[2] eq 'unknown' ? 1 : 0,
 
-            $fields[2] eq 'pass'    ? 1 : 0,
-            $fields[2] eq 'fail'    ? 1 : 0,
-            $fields[2] eq 'na'      ? 1 : 0,
-            $fields[2] eq 'unknown' ? 1 : 0);
+                    $fields[1]);    # guid
+            }
+        } else {
+            $self->{CPANSTATS}->do_query($SQL{INSERT}{RELEASE},
+                $fields[0],$fields[1],  # id, guid
+                $fields[5],$fields[6],  # dist, version
+
+                $self->_oncpan($fields[5],$fields[6])   ? 1 : 2,
+
+                $fields[6] =~ /_/                       ? 2 : 1,
+                $fields[8] =~ /^5.(7|9|[1-9][13579])/   ? 2 : 1,    # odd numbers now mark development releases
+                $fields[8] =~ /(RC\d+|patch)/           ? 2 : 1,
+
+                $fields[2] eq 'pass'    ? 1 : 0,
+                $fields[2] eq 'fail'    ? 1 : 0,
+                $fields[2] eq 'na'      ? 1 : 0,
+                $fields[2] eq 'unknown' ? 1 : 0);
+        }
     }
 
-    if((++$self->{stat_count} % 50) == 0) {
-        $self->{CPANSTATS}->do_commit;
-        $self->{LITESTATS}->do_commit;
+    if((++$self->{stat_count} % 500) == 0) {
+        $self->commit;
     }
+
+    return 1;
 }
 
 sub cache_report {
     my $self = shift;
-    return  unless($self->{article}{nntp} && $self->{article}{article});
+    return  unless($self->{report}{guid} && $self->{report}{metabase});
 
-    my @fields = map {$self->{article}{$_}} qw(nntp article);;
-    $fields[$_] ||= 0   for(0);
-    $fields[$_] ||= ''  for(1);
+    $self->{'CPANSTATS'}->do_query('INSERT IGNORE INTO metabase.metabase (guid,id,updated,report) VALUES (?,?,?,?)',
+        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},encode_json($self->{report}{metabase}));
 
-    my $INSERT = 'INSERT INTO articles VALUES (?,?)';
-
-    for my $db (qw(LITEARTS)) {
-        my @rows = $self->{$db}->get_query('array','SELECT * FROM articles WHERE id=?',$fields[0]);
-        next    if(@rows);
-        $self->{$db}->do_query($INSERT,@fields);
+    if((++$self->{meta_count} % 500) == 0) {
+        $self->{CPANSTATS}->do_commit;
     }
 
-    if((++$self->{arts_count} % 50) == 0) {
-        $self->{LITEARTS}->do_commit;
+    return 1;
+}
+
+sub cache_update {
+    my $self = shift;
+    return  unless($self->{report}{guid} && $self->{report}{id});
+
+    $self->{'CPANSTATS'}->do_query('UPDATE metabase.metabase SET id=? WHERE guid=?',$self->{report}{id},$self->{report}{guid});
+
+    if((++$self->{meta_count} % 500) == 0) {
+        $self->{CPANSTATS}->do_commit;
     }
+
+    return 1;
 }
 
 #----------------------------------------------------------------------------
 # Private Functions
+
+sub _get_createdate {
+    my ($self,$guid,$date) = @_;
+
+    return  unless($guid && $date);
+    if($guid) {
+        my @rows = $self->{CPANSTATS}->get_query('hash','SELECT updated FROM metabase.metabase WHERE guid=?',$guid);
+        $date = $rows[0]->{updated}  if(@rows);
+    }
+
+    return $date    if($date =~ /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    return;        
+}
+
+sub _get_tester {
+    my ($self,$creator) = @_;
+    return $testers{$creator}   if($testers{$creator});
+
+    my $profile  = Metabase::Resource->new( $creator );
+    return $creator unless($profile);
+
+    my $user;
+    eval { $user = $self->{librarian}->extract( $profile->guid ) };
+    return $creator unless($user);
+
+    my ($name,@emails);
+    for my $fact ($user->facts()) {
+        if(ref $fact eq 'Metabase::User::EmailAddress') {
+            push @emails, $fact->{content};
+        } elsif(ref $fact eq 'Metabase::User::FullName') {
+            $name = $fact->{content};
+        }
+    }
+
+    $name ||= 'NONAME'; # shouldn't happen, but allows for checks later
+
+    for my $em (@emails) {
+        $self->{CPANSTATS}->do_query('INSERT INTO metabase.testers_email (resource,fullname,email) VALUES (?,?,?)',$creator,$name,$em);
+    }
+
+    $testers{$creator} = @emails ? $emails[0] : $creator;
+    $testers{$creator} =~ s/\'/''/g if($testers{$creator});
+    return $testers{$creator};
+}
 
 sub _get_author {
     my ($self,$dist,$version) = @_;
@@ -379,7 +693,7 @@ sub _valid_field {
 sub _get_lastid {
     my $self = shift;
 
-    my @rows = $self->{LITEARTS}->get_query('array',"SELECT max(id) FROM articles");
+    my @rows = $self->{CPANSTATS}->get_query('array',"SELECT max(id) FROM metabase.metabase");
     return 0    unless(@rows);
     return $rows[0]->[0] || 0;
 }
@@ -403,6 +717,12 @@ sub _osname {
         $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$self->{OSNAMES}{$lname}')});
     }
     return $name;
+}
+
+sub _emaildate {
+    my $self = shift;
+    my $t = localtime;
+    return $t->strftime("%a, %d %b %Y %H:%M:%S +0000");
 }
 
 sub _log {
@@ -475,7 +795,7 @@ several index tables to speed up searches. The main table is as below:
   | perl     | TEXT                |
   | osname   | TEXT                |
   | osvers   | TEXT                |
-  | fulldate | TEXT                |
+  | date     | TEXT                |
   | guid     | TEXT                |
   | type     | INTEGER             |
   +----------+---------------------+
@@ -483,15 +803,18 @@ several index tables to speed up searches. The main table is as below:
 It should be noted that 'postdate' refers to the YYYYMM formatted date, whereas
 the 'date' field refers to the YYYYMMDDhhmm formatted date and time.
 
-The articles database schema is again very straightforward, and consists of one
+The metabase database schema is again very straightforward, and consists of one
 table, as below:
 
   +--------------------------------+
-  | articles                       |
+  | metabase                       |
   +----------+---------------------+
-  | id       | INTEGER PRIMARY KEY |
-  | article  | TEXT                |
+  | guid     | TEXT PRIMARY KEY    |
+  | report   | TEXT                |
   +----------+---------------------+
+
+The report field is JSON encoded, and is a cached version of the one extracted
+from Metabase::Librarian.
 
 =head1 SIGNIFICANT CHANGES
 
@@ -527,6 +850,13 @@ As of this release the cpanstats id field is a unique auto incrementing field.
 The next release of this distribution will be focused on generation of stats
 using the Metabase storage API.
 
+=head2 v1.00 CHANGES
+
+Moved to Metabase API. The change to a definite major version number hopefully
+indicates that this is a major interface change. All previous NNTP access has
+been dropped and is no longer relavent. All report updates are now fed from
+the Metabase API.
+
 =head1 INTERFACE
 
 =head2 The Constructor
@@ -548,11 +878,6 @@ written if a logfile entry is specified, and will always append to any existing
 file. The 'config' should contain the path to the configuration file, used
 to define the database access and general operation settings.
 
-In addition the binary keys of 'ignore' and 'nostore' are available. 'ignore'
-is used to ignore NNTP entries which return no article and continue processing
-articles, while 'nostore' will delete all articles, except the last one
-received, thus reducing space in the SQL database.
-
 =back
 
 =head2 Public Methods
@@ -561,23 +886,24 @@ received, thus reducing space in the SQL database.
 
 =item * generate
 
-Starting from the last recorded article, retrieves all the more recent articles
-from the NNTP server, parsing each and recording the articles that either
-upload announcements or reports.
+Starting from the last cached report, retrieves all the more recent reports
+from the Metabase Report Submission server, parsing each and recording each
+report in both the cpanstats databases (MySQL & SQLite) and the metabase cache
+database.
 
 =item * rebuild
 
 In the event that the cpanstats database needs regenerating, either in part or
 for the whole database, this method allow you to do so. You may supply
 parameters as to the 'start' and 'end' values (inclusive), where all records
-are assumed by default. Note that the 'nostore' option is ignored and no
-records are deleted from the articles database.
+are assumed by default. Records are rebuilt using the local metabase cache
+database.
 
 =item * reparse
 
 Rather than a complete rebuild the option to selective reparse selected entries
-is useful if there are posts which have since been identified as valid and now
-have supporting parsing code within the codebase.
+is useful if there are reports which were previously unable to correctly supply
+a particular field, which now has supporting parsing code within the codebase.
 
 In addition there is the option to exclude fields from parsing checks, where
 they may be corrupted, and can be later amended using the 'cpanstats-update'
@@ -589,34 +915,37 @@ tool.
 
 =over
 
-=item * cleanup
-
-In the event that you do not wish to store all the articles permanently in the
-articles database, this method removes all but the most recent entry, which is
-kept to ensure that subsequent runs will start from the correct article. To
-enable this feature, specify 'nostore' within the has passed to new().
-
 =item * commit
 
-To speed up the transaction process, a commit is performed every 50 inserts.
+To speed up the transaction process, a commit is performed every 500 inserts.
 This method is used as part of the clean up process to ensure all transactions
 are completed.
 
-=item * nntp_connect
+=item * get_next_guids
 
-Sets up the connection to the NNTP server.
+Get the list of GUIDs for the reports that have been submitted since the last
+cached report.
 
-=item * parse_article
+=item * get_fact
 
-Parses an article extracting the metadata required for the stats database.
+Get a specific report factfor a given GUID.
 
-=item * cache_report
+=item * parse_report
 
-Inserts an article into the articles database.
+Parses a report extracting the metadata required for the stats database.
+
+=item * reparse_report
+
+Parses a report (from a local metabase cache) extracting the metadata required
+for the stats database.
 
 =item * store_report
 
-Inserts the components of a parsed article into the statistics database.
+Inserts the components of a parsed report into the statistics database.
+
+=item * cache_report
+
+Inserts a serialised report into a local metabase cache database.
 
 =back
 
@@ -660,6 +989,13 @@ http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 
+L<CPAN::Testers::Report>,
+L<Metabase>,
+L<Metabase::Fact>,
+L<CPAN::Testers::Fact::LegacyReport>,
+L<CPAN::Testers::Fact::TestSummary>,
+L<CPAN::Testers::Metabase::AWS>
+
 L<CPAN::Testers::WWW::Statistics>
 
 F<http://www.cpantesters.org/>,
@@ -669,14 +1005,14 @@ F<http://wiki.cpantesters.org/>
 =head1 AUTHOR
 
 It should be noted that the original code for this distribution began life
-under another name. The original distribution generated data for the original 
+under another name. The original distribution generated data for the original
 CPAN Testers website. However, in 2008 the code was reworked to generate data
-in the format for the statistics data analysis, which in turn was reworked to 
-drive the redesign of the all the CPAN Testers websites. To reflect the code 
+in the format for the statistics data analysis, which in turn was reworked to
+drive the redesign of the all the CPAN Testers websites. To reflect the code
 changes, a new name was given to the distribution.
 
 =head2 CPAN-WWW-Testers-Generator
-  
+
   Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
   Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2010
 

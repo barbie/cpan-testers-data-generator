@@ -3,23 +3,28 @@ WriteMakefile(
     'NAME'          => 'CPAN::Testers::Data::Generator',
     'VERSION_FROM'  => 'lib/CPAN/Testers/Data/Generator.pm',
     'PREREQ_PM'     => {
-        'Email::Simple'                     => 0,       # only for scripts
         'Getopt::Long'                      => 0,       # only for scripts
         'Getopt::ArgvFile'                  => 0,       # only for scripts
 
         'Config::IniFiles'                  => 0,
-        'CPAN::Testers::Common::Article'    => 0.36,
         'CPAN::Testers::Common::DBUtils'    => 0.03,
-        'CPAN::Testers::Common::Utils'      => 0,
         'File::Basename'                    => 0,
         'File::Path'                        => 0,
         'IO::File'                          => 0,
-        'Net::NNTP'                         => 0,
+        'JSON'                              => 0,
+        'Time::Local'                       => 0,
+        'Metabase'                          => 0.004,
+        'Metabase::Fact'                    => 0,
+        'CPAN::Testers::Fact::LegacyReport' => 0,
+        'CPAN::Testers::Fact::TestSummary'  => 0,
+        'CPAN::Testers::Metabase::AWS'      => 0,
+        'CPAN::Testers::Report'             => 0,
 
+        'DBI'                               => 0,
         'DBD::mysql'                        => 0,
         'DBD::SQLite'                       => 1.07,
 
-        'Test::More'                        => 0,       # only for testing
+        'Test::More'                        => 0.70,    # only for testing
     },
 
     'PL_FILES'      => {},
