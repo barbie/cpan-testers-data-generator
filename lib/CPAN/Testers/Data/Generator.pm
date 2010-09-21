@@ -47,11 +47,6 @@ Thanks,
 CPAN Testers Server.
 ';
 
-my @admins = (
-    'barbie@missbarbell.co.uk',
-    #'david@dagolden.com'
-);
-
 #----------------------------------------------------------------------------
 # The Application Programming Interface
 
@@ -77,6 +72,11 @@ sub new {
         $self->{$db} = CPAN::Testers::Common::DBUtils->new(%opts);
         die "Cannot configure $db database\n" unless($self->{$db});
         $self->{$db}->{'mysql_enable_utf8'} = 1 if($opts{driver} =~ /mysql/i);
+    }
+
+    if($cfg->SectionExists('ADMINISTRATION')) {
+        my @admins = $cfg->val('ADMINISTRATION','admins');
+        $self->{admins} = \@admins;
     }
 
     # command line swtiches override configuration settings
@@ -172,7 +172,7 @@ $self->_log("START nonstop=$nonstop\n");
         my $INVALID = join("\n",@{$self->{invalid}});
         $self->_log("INVALID:\n$INVALID\n");
 
-        for my $admin (@admins) {
+        for my $admin (@{$self->{admins}}) {
             my $cmd = qq!| $HOW $admin!;
 
             my $body = $HEAD . $BODY;
