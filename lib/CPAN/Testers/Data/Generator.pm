@@ -122,7 +122,7 @@ sub generate {
     my $self    = shift;
     my $nonstop = shift || 0;
 
-$self->_log("START nonstop=$nonstop\n");
+$self->_log("START GENERATE nonstop=$nonstop\n");
 
     do {
 
@@ -166,37 +166,75 @@ $self->_log("START nonstop=$nonstop\n");
     $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
 
     # only email invalid reports during the generate process
-    if($self->{invalid}) {
-        my $DATE = $self->_emaildate();
-        $DATE =~ s/\s+$//;
-        my $INVALID = join("\n",@{$self->{invalid}});
-        $self->_log("INVALID:\n$INVALID\n");
-
-        for my $admin (@{$self->{admins}}) {
-            my $cmd = qq!| $HOW $admin!;
-
-            my $body = $HEAD . $BODY;
-            $body =~ s/FROM/$FROM/g;
-            $body =~ s/EMAIL/$admin/g;
-            $body =~ s/DATE/$DATE/g;
-            $body =~ s/INVALID/$INVALID/g;
-
-            if(my $fh = IO::File->new($cmd)) {
-                print $fh $body;
-                $fh->close;
-                $self->_log(".. MAIL SEND - SUCCESS - $admin\n");
-            } else {
-                $self->_log(".. MAIL SEND - FAILED - $admin\n");
-            }
-        }
-    }
+    $self->_send_email()    if($self->{invalid});
 
     $nonstop = 0	if($processed == 0);
     $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
 
 $self->_log("CHECK nonstop=$nonstop\n");
     } while($nonstop);
-$self->_log("STOP nonstop=$nonstop\n");
+$self->_log("STOP GENERATE nonstop=$nonstop\n");
+}
+
+sub regenerate {
+    my ($self,%hash) = @_;
+    $self->{reparse} = 1;
+
+$self->_log("START REGENERATE\n");
+
+    $hash{dstart} = $self->_get_createdate( $hash{gstart}, $hash{dstart} );
+
+    my @where;
+    push @where, "updated >= $hash{dstart}"  if($hash{dstart});
+    
+    my $sql =   'SELECT guid FROM metabase.metabase' . 
+                (@where ? ' WHERE ' . join(' AND ',@where) : '') .
+                ' ORDER BY updated asc';
+
+    my @guids = $self->{CPANSTATS}->get_query('hash',$sql);
+    my %guids = map {$_->{guid} => 1} @guids;
+
+    my ($processed,$stored,$cached) = (0,0,0);
+    my $start = localtime(time);
+
+    my $last;
+    my $guids = $self->get_next_guids($hash{dstart});
+    if($guids) {
+        for my $guid (@$guids) {
+            $self->_log("GUID [$guid]");
+            $processed++;
+            $last = $guid;
+
+            if($guids{$guid}) {
+                $self->_log(".. already saved\n");
+                next;
+            }
+
+            if(my $report = $self->get_fact($guid)) {
+                $self->{report}{guid}   = $guid;
+                next    if($self->parse_report(report => $report));
+
+                if($self->store_report()) { $self->_log(".. stored"); $stored++;    }
+                else                      { $self->_log(".. already stored");       }
+                if($self->cache_report()) { $self->_log(".. cached\n"); $cached++;  }
+                else                      { $self->_log(".. already cached\n");     }
+            } else {
+                $self->_log(".. FAIL\n");
+            }
+        }
+    }
+
+    $self->commit();
+    my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
+    my $stop = localtime(time);
+    $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
+
+    # only email invalid reports during the generate process
+    $self->_send_email()    if($self->{invalid});
+
+$self->_log("STOP REGENERATE last=$last\n");
+
+    return $last;
 }
 
 sub rebuild {
@@ -300,41 +338,28 @@ sub commit {
 }
 
 sub get_next_guids {
-    my $self = shift;
+    my ($self,$dstart) = @_;
     my $guids;
-
     my $time;
 
-    my @rows = $self->{CPANSTATS}->get_query('array','SELECT max(updated) FROM metabase.metabase');
-    $self->{time} = $rows[0]->[0]	if(@rows);
+    if($dstart) {
+        $self->{time} = $dstart;
+    } else {
+        my @rows = $self->{CPANSTATS}->get_query('array','SELECT max(updated) FROM metabase.metabase');
+        $self->{time} = $rows[0]->[0]	if(@rows);
 
-    #my @rows = $self->{CPANSTATS}->get_query('hash','SELECT max(created) FROM metabase.metabase BY id DESC LIMIT 1');
-    #if(@rows) {
-    #    my $report;
-    #    eval { $report = decode_json($rows[0]->{report}); };
-    #    if($@) {
-    #        $self->_log(" ... Metabase Local Cache Failed [$@]\n") if($@);
-    #        return
-    #    }
-    #    $time = $report->{'CPAN::Testers::Fact::TestSummary'}{metadata}{core}{update_time};
-    #}
-
-    $self->{time} ||= '1999-01-01T00:00:00Z';
-    if($self->{last} ge $self->{time}) {
-        my @ts = $self->{last} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
-        $ts[1]--;
-        my $ts = timelocal(reverse @ts);
-        @ts = localtime($ts + $self->{offset}); # increment the offset for next time
-        $self->{time} = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $ts[5]+1900,$ts[4]+1,$ts[3], $ts[2],$ts[1],$ts[0];
+        $self->{time} ||= '1999-01-01T00:00:00Z';
+        if($self->{last} ge $self->{time}) {
+            my @ts = $self->{last} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+            $ts[1]--;
+            my $ts = timelocal(reverse @ts);
+            @ts = localtime($ts + $self->{offset}); # increment the offset for next time
+            $self->{time} = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $ts[5]+1900,$ts[4]+1,$ts[3], $ts[2],$ts[1],$ts[0];
+        }
     }
+
     $self->_log("START time=[$self->{time}], last=[$self->{last}]\n");
     $self->{last} = $self->{time};
-
-    #$self->{metabase} = CPAN::Testers::Metabase::AWS->new(
-    #    bucket      => 'cpantesters',
-    #    namespace   => 'beta2',
-    #);
-    #$self->{librarian} = $self->{metabase}->public_librarian;
 
     eval {
     	$guids = $self->{librarian}->search(
@@ -495,6 +520,15 @@ sub reparse_report {
     return  unless($self->_valid_field($guid, 'platform' => $self->{report}{platform}) || ($options && $options->{exclude}{platform}));
     return  unless($self->_valid_field($guid, 'osname'   => $self->{report}{osname})   || ($options && $options->{exclude}{osname}));
     return  unless($self->_valid_field($guid, 'osvers'   => $self->{report}{osvers})   || ($options && $options->{exclude}{osname}));
+}
+
+sub retrieve_report {
+    my $self = shift;
+    my $quid = shift or return;
+
+    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT * FROM cpanstats WHERE guid=?',$guid);
+    return $rows[0] if(@rows);
+    return;
 }
 
 sub store_report {
@@ -719,10 +753,31 @@ sub _osname {
     return $name;
 }
 
-sub _emaildate {
+sub _send_email {
     my $self = shift;
     my $t = localtime;
-    return $t->strftime("%a, %d %b %Y %H:%M:%S +0000");
+    my $DATE = $t->strftime("%a, %d %b %Y %H:%M:%S +0000");
+    $DATE =~ s/\s+$//;
+    my $INVALID = join("\n",@{$self->{invalid}});
+    $self->_log("INVALID:\n$INVALID\n");
+
+    for my $admin (@{$self->{admins}}) {
+        my $cmd = qq!| $HOW $admin!;
+
+        my $body = $HEAD . $BODY;
+        $body =~ s/FROM/$FROM/g;
+        $body =~ s/EMAIL/$admin/g;
+        $body =~ s/DATE/$DATE/g;
+        $body =~ s/INVALID/$INVALID/g;
+
+        if(my $fh = IO::File->new($cmd)) {
+            print $fh $body;
+            $fh->close;
+            $self->_log(".. MAIL SEND - SUCCESS - $admin\n");
+        } else {
+            $self->_log(".. MAIL SEND - FAILED - $admin\n");
+        }
+    }
 }
 
 sub _log {
@@ -891,6 +946,18 @@ from the Metabase Report Submission server, parsing each and recording each
 report in both the cpanstats databases (MySQL & SQLite) and the metabase cache
 database.
 
+=item * regenerate
+
+For a given date range, retrieves all the reports from the Metabase Report 
+Submission server, parsing each and recording each report in both the cpanstats
+databases (MySQL & SQLite) and the metabase cache database.
+
+Note that as only 2500 can be returned at any one time due to Amazon SimpleDB
+restrictions, this method will only process the guids returned from a given
+start data, up to a maxiumu of 2500 guids.
+
+This methog will return the guid of the last report processed.
+
 =item * rebuild
 
 In the event that the cpanstats database needs regenerating, either in part or
@@ -932,16 +999,21 @@ Get a specific report factfor a given GUID.
 
 =item * parse_report
 
-Parses a report extracting the metadata required for the stats database.
+Parses a report extracting the metadata required for the cpanstats database.
 
 =item * reparse_report
 
 Parses a report (from a local metabase cache) extracting the metadata required
 for the stats database.
 
+=item * retrieve_report
+
+Given a guid will attempt to return the report metadata from the cpanstats 
+database.
+
 =item * store_report
 
-Inserts the components of a parsed report into the statistics database.
+Inserts the components of a parsed report into the cpanstats database.
 
 =item * cache_report
 
