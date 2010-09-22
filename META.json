@@ -3,7 +3,7 @@
     "version": "1.00",
     "abstract": "Download and summarize CPAN Testers data.",
     "author": [
-        "Barbie (BARBIE) <barbie@cpan.org>",
+        "Barbie (BARBIE) <barbie@cpan.org>"
     ],
 
     "license": "artistic_2",

@@ -188,7 +188,6 @@ $self->_log("START REGENERATE\n");
     return  unless($hash->{dstart} && $hash->{dend});
 
 $self->_log("dstart=$hash->{dstart}, dend=$hash->{dend}\n");
-print STDERR "#\ndstart=$hash->{dstart}, dend=$hash->{dend}\n";
 
     my @where;
     push @where, "updated >= '$hash->{dstart}'"  if($hash->{dstart});
@@ -1009,6 +1008,11 @@ are completed.
 Get the list of GUIDs for the reports that have been submitted since the last
 cached report.
 
+=item * already_saved
+
+Given a guid, determines whether it has already been saved in the local
+metabase cache.
+
 =item * get_fact
 
 Get a specific report factfor a given GUID.
@@ -1034,6 +1038,11 @@ Inserts the components of a parsed report into the cpanstats database.
 =item * cache_report
 
 Inserts a serialised report into a local metabase cache database.
+
+=item * cache_update
+
+For the current report will update the local metabase cache with the id used
+within the cpanstats database.
 
 =back
 

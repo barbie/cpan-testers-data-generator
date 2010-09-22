@@ -396,7 +396,7 @@ is(create_metabase(0), 0, '.. metabase created');
     );
 
     for my $test (@test_dates) {
-        is($t->_get_createdate($test->[1],$test->[2]),$test->[0], ".. test date [$test->[0]]"); 
+        is($t->_get_createdate($test->[1],$test->[2]),$test->[0], ".. test date [".($test->[0]||'undef')."]"); 
     }
 }
 
