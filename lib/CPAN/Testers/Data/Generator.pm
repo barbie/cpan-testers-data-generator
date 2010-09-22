@@ -177,20 +177,22 @@ $self->_log("STOP GENERATE nonstop=$nonstop\n");
 }
 
 sub regenerate {
-    my ($self,%hash) = @_;
+    my ($self,$hash) = @_;
     $self->{reparse} = 1;
 
 $self->_log("START REGENERATE\n");
 
-    $hash{dstart} = $self->_get_createdate( $hash{gstart}, $hash{dstart} );
-    $hash{dend}   = $self->_get_createdate( $hash{gend},   $hash{dend} );
+    $hash->{dstart} = $self->_get_createdate( $hash->{gstart}, $hash->{dstart} );
+    $hash->{dend}   = $self->_get_createdate( $hash->{gend},   $hash->{dend} );
 
-$self->_log("dstart=$hash{dstart}, dend=$hash{dend}\n");
-print STDERR "#\ndstart=$hash{dstart}, dend=$hash{dend}\n";
+    return  unless($hash->{dstart} && $hash->{dend});
+
+$self->_log("dstart=$hash->{dstart}, dend=$hash->{dend}\n");
+print STDERR "#\ndstart=$hash->{dstart}, dend=$hash->{dend}\n";
 
     my @where;
-    push @where, "updated >= $hash{dstart}"  if($hash{dstart});
-    push @where, "updated <= $hash{dend}"    if($hash{dend});
+    push @where, "updated >= '$hash->{dstart}'"  if($hash->{dstart});
+    push @where, "updated <= '$hash->{dend}'"    if($hash->{dend});
     
     my $sql =   'SELECT guid FROM metabase' . 
                 (@where ? ' WHERE ' . join(' AND ',@where) : '') .
@@ -200,10 +202,10 @@ print STDERR "#\ndstart=$hash{dstart}, dend=$hash{dend}\n";
     my %guids = map {$_->{guid} => 1} @guids;
 
     my ($processed,$stored,$cached) = (0,0,0);
-    my $start = $hash{dstart};
+    my $start = $hash->{dstart};
 
     my $last = $start;
-    while($start le $hash{dend}) {
+    while($start le $hash->{dend}) {
         my $guids = $self->get_next_guids($start);
         if($guids) {
             for my $guid (@$guids) {
@@ -250,7 +252,7 @@ $self->_log("STOP REGENERATE last=$last\n");
 }
 
 sub rebuild {
-    my ($self,%hash) = @_;
+    my ($self,$hash) = @_;
     $self->{reparse} = 1;
     my ($processed,$stored,$cached) = (0,0,0);
     my $start = localtime(time);
@@ -261,12 +263,12 @@ $self->_log("START REBUILD\n");
     # 1) from guid [to guid]
     # 2) from date [to date]
 
-    $hash{dstart} = $self->_get_createdate( $hash{gstart}, $hash{dstart} );
-    $hash{dend}   = $self->_get_createdate( $hash{gend},   $hash{dend} );
+    $hash->{dstart} = $self->_get_createdate( $hash->{gstart}, $hash->{dstart} );
+    $hash->{dend}   = $self->_get_createdate( $hash->{gend},   $hash->{dend} );
 
     my @where;
-    push @where, "updated >= $hash{dstart}"  if($hash{dstart});
-    push @where, "updated <= $hash{dend}"    if($hash{dend});
+    push @where, "updated >= '$hash->{dstart}'"  if($hash->{dstart});
+    push @where, "updated <= '$hash->{dend}'"    if($hash->{dend});
     
     my $sql =   'SELECT * FROM metabase' . 
                 (@where ? ' WHERE ' . join(' AND ',@where) : '') .
@@ -690,8 +692,8 @@ sub _get_createdate {
         $date = $rows[0]->{updated}  if(@rows);
     }
 
-    return $date    if($date =~ /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
-    return;        
+    return          unless($date && $date =~ /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    return $date;        
 }
 
 sub _get_tester {

@@ -16,7 +16,7 @@ use Test::More;
 
 my (%options,$meta);
 my $config = './t/test-config.ini';
-my $TESTS = 54;
+my $TESTS = 57;
 
 #----------------------------------------------------------------------------
 # Test Conditions
@@ -425,7 +425,7 @@ is(create_metabase(0), 0, '.. metabase created');
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
 
     # recreate the stats database for specific entries
-    $t->rebuild(1,4);
+    $t->rebuild({gstart => 1, gend => 4});
 
     # check stats database is again the same size as before
     ok(-f $directory . '/cpanstats.db');
@@ -504,7 +504,7 @@ is(create_metabase(0), 0, '.. metabase created');
         logfile => $directory . '/cpanstats.log'
     );
 
-    $t->regenerate({ddate => '2000-01-01T00:00:00Z', dend => '2010-09-01T00:00:00Z'});
+    $t->regenerate({dstart => '2000-01-01T00:00:00Z', dend => '2010-09-01T00:00:00Z'});
 
     my $c2 = getMetabaseCount();
     is($c1,$c2,'... no more or less reports');
