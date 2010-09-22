@@ -8,6 +8,7 @@ use CPAN::Testers::Metabase::AWS;
 use Data::Dumper;
 use File::Path;
 use IO::File;
+use JSON;
 use Test::More;
 
 #----------------------------------------------------------------------------
@@ -15,7 +16,7 @@ use Test::More;
 
 my (%options,$meta);
 my $config = './t/test-config.ini';
-my $TESTS = 49;
+my $TESTS = 54;
 
 #----------------------------------------------------------------------------
 # Test Conditions
@@ -274,6 +275,14 @@ my @delete_meta_mysql = (
             'DELETE FROM metabase'
 );
 
+my @test_meta_rows = (
+[ 1, 'a58945f6-3510-11df-89c9-1bb9c3681c0d', '2010-03-21T17:39:05Z' ],
+[ 2, 'ad3189d0-3510-11df-89c9-1bb9c3681c0d', '2010-03-21T17:39:18Z' ],
+[ 3, 'af820e12-3510-11df-89c9-1bb9c3681c0d', '2010-03-21T17:39:22Z' ],
+[ 4, 'b248f71e-3510-11df-89c9-1bb9c3681c0d', '2010-03-21T17:39:27Z' ],
+[ 5, 'b77e7132-3510-11df-89c9-1bb9c3681c0d', '2010-03-21T17:39:35Z' ]
+);
+
 #----------------------------------------------------------------------------
 # Test Main
 
@@ -363,6 +372,33 @@ is(create_db(2), 0, '.. dbs prepped');
 # build test metabase
 
 is(create_metabase(0), 0, '.. metabase created');
+
+# TEST INTERNALS
+
+{
+    testMetabaseRecords();
+
+    my $c1 = getMetabaseCount();
+    is($c1,5,'Internal Tests, metabase contains 5 reports');
+
+    my $t = CPAN::Testers::Data::Generator->new(
+        config  => $config,
+        logfile => $directory . '/cpanstats.log'
+    );
+
+    my @test_dates = (
+        [ undef, '', '' ],
+        [ undef, 'xxx', '' ],
+        [ undef, '', 'xxx' ],
+        [ '2000-01-01T00:00:00Z', '', '2000-01-01T00:00:00Z' ],
+        [ '2010-09-13T03:20:00Z', undef, '2010-09-13T03:20:00Z' ],
+        [ '2010-03-21T17:39:05Z', 'a58945f6-3510-11df-89c9-1bb9c3681c0d', '' ],
+    );
+
+    for my $test (@test_dates) {
+        is($t->_get_createdate($test->[1],$test->[2]),$test->[0], ".. test date [$test->[0]]"); 
+    }
+}
 
 ## Test we can rebuild
 
@@ -478,6 +514,7 @@ is(create_metabase(0), 0, '.. metabase created');
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
 }
 
+
 # now clean up!
 rmtree($directory);
 
@@ -578,15 +615,19 @@ sub create_metabase {
     my @guids = map {s!.*/(.*?).json$!$1!; $_} glob('t/data/*.json');
     #diag "create_metabase: guids=@guids";
 
+    my $id = 1;
     for my $guid (@guids) {
         #diag "create_metabase: guid=$guid";
 
-        my $text;
+        my $json;
         my $fh = IO::File->new("t/data/$guid.json") or return 1;
-        while(<$fh>) { $text .= $_ }
+        while(<$fh>) { $json .= $_ }
         $fh->close;
 
-        $options{'METABASE'}->{dbh}->do_query('INSERT INTO metabase (guid,report) VALUES (?,?)',$guid,$text);
+        my $text = decode_json($json);
+        my $date = $text->{'CPAN::Testers::Fact::TestSummary'}{metadata}{core}{update_time};
+
+        $options{'METABASE'}->{dbh}->do_query('INSERT INTO metabase (id,guid,updated,report) VALUES (?,?,?,?)',$id++,$guid,$date,$json);
     }
 
     my $fh = IO::File->new("t/data/testers.csv") or return 1;
@@ -600,9 +641,14 @@ sub create_metabase {
     return 0;
 }
 
+sub testMetabaseRecords {
+    $options{METABASE} ||= config_db('METABASE');
+    my @rows = $options{METABASE}->{dbh}->get_query('array','SELECT id,guid,updated FROM metabase');
+    is_deeply(\@rows,\@test_meta_rows,'.. test metabase rows');
+}
+
 sub getMetabaseCount {
     $options{METABASE} ||= config_db('METABASE');
-
     my @rows = $options{METABASE}->{dbh}->get_query('array','SELECT count(id) FROM metabase');
     return 0	unless(@rows);
     return $rows[0]->[0] || 0;
@@ -610,7 +656,6 @@ sub getMetabaseCount {
 
 sub deleteMetabase {
     my $id = shift;
-
     $options{METABASE} ||= config_db('METABASE');
     my @rows = $options{METABASE}->{dbh}->get_query('array','SELECT * FROM metabase WHERE id = ?',$id);
     $options{METABASE}->{dbh}->do_query('DELETE FROM metabase WHERE id = ?',$id)    if(@rows);
