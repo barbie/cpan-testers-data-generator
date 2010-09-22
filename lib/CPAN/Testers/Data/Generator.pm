@@ -65,7 +65,7 @@ sub new {
     my $cfg = Config::IniFiles->new( -file => $hash{config} );
 
     # configure databases
-    for my $db (qw(CPANSTATS LITESTATS)) {
+    for my $db (qw(CPANSTATS LITESTATS METABASE)) {
         die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
         my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
         $opts{AutoCommit} = 0;
@@ -87,7 +87,7 @@ sub new {
     $self->{offset}     ||= 1;
     $self->{poll_limit} ||= 1000;
 
-    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT * FROM metabase.testers_email');
+    my @rows = $self->{METABASE}->get_query('hash','SELECT * FROM testers_email');
     for my $row (@rows) {
         $testers{$row->{resource}} = $row->{email};
     }
@@ -183,45 +183,57 @@ sub regenerate {
 $self->_log("START REGENERATE\n");
 
     $hash{dstart} = $self->_get_createdate( $hash{gstart}, $hash{dstart} );
+    $hash{dend}   = $self->_get_createdate( $hash{gend},   $hash{dend} );
+
+$self->_log("dstart=$hash{dstart}, dend=$hash{dend}\n");
+print STDERR "#\ndstart=$hash{dstart}, dend=$hash{dend}\n";
 
     my @where;
     push @where, "updated >= $hash{dstart}"  if($hash{dstart});
+    push @where, "updated <= $hash{dend}"    if($hash{dend});
     
-    my $sql =   'SELECT guid FROM metabase.metabase' . 
+    my $sql =   'SELECT guid FROM metabase' . 
                 (@where ? ' WHERE ' . join(' AND ',@where) : '') .
                 ' ORDER BY updated asc';
 
-    my @guids = $self->{CPANSTATS}->get_query('hash',$sql);
+    my @guids = $self->{METABASE}->get_query('hash',$sql);
     my %guids = map {$_->{guid} => 1} @guids;
 
     my ($processed,$stored,$cached) = (0,0,0);
-    my $start = localtime(time);
+    my $start = $hash{dstart};
 
-    my $last;
-    my $guids = $self->get_next_guids($hash{dstart});
-    if($guids) {
-        for my $guid (@$guids) {
-            $self->_log("GUID [$guid]");
-            $processed++;
-            $last = $guid;
+    my $last = $start;
+    while($start le $hash{dend}) {
+        my $guids = $self->get_next_guids($start);
+        if($guids) {
+            for my $guid (@$guids) {
+                $self->_log("GUID [$guid]");
+                $processed++;
 
-            if($guids{$guid}) {
-                $self->_log(".. already saved\n");
-                next;
-            }
+                if($guids{$guid}) {
+                    $self->_log(".. already saved\n");
+                    next;
+                }
 
-            if(my $report = $self->get_fact($guid)) {
-                $self->{report}{guid}   = $guid;
-                next    if($self->parse_report(report => $report));
+                if(my $report = $self->get_fact($guid)) {
+                    $start = $report->{metadata}{core}{update_time};
+                    $self->{report}{guid}   = $guid;
+                    next    if($self->parse_report(report => $report));
 
-                if($self->store_report()) { $self->_log(".. stored"); $stored++;    }
-                else                      { $self->_log(".. already stored");       }
-                if($self->cache_report()) { $self->_log(".. cached\n"); $cached++;  }
-                else                      { $self->_log(".. already cached\n");     }
-            } else {
-                $self->_log(".. FAIL\n");
+                    if($self->store_report()) { $self->_log(".. stored"); $stored++;    }
+                    else                      { $self->_log(".. already stored");       }
+                    if($self->cache_report()) { $self->_log(".. cached\n"); $cached++;  }
+                    else                      { $self->_log(".. already cached\n");     }
+                } else {
+                    $self->_log(".. FAIL\n");
+                }
             }
         }
+
+        $self->commit();
+
+        last    if($start eq $last);
+        $last = $start;
     }
 
     $self->commit();
@@ -256,16 +268,16 @@ $self->_log("START REBUILD\n");
     push @where, "updated >= $hash{dstart}"  if($hash{dstart});
     push @where, "updated <= $hash{dend}"    if($hash{dend});
     
-    my $sql =   'SELECT * FROM metabase.metabase' . 
+    my $sql =   'SELECT * FROM metabase' . 
                 (@where ? ' WHERE ' . join(' AND ',@where) : '') .
                 ' ORDER BY updated asc';
 
 #    $self->{CPANSTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
 #    $self->{LITESTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
 
-    my $iterator = $self->{CPANSTATS}->iterator('hash',$sql);
+    my $iterator = $self->{METABASE}->iterator('hash',$sql);
     while(my $row = $iterator->()) {
-        $self->_log("GUID [$guid]");
+        $self->_log("GUID [$row->{guid}]");
         $processed++;
 
         # no article for that id!
@@ -345,7 +357,7 @@ sub get_next_guids {
     if($dstart) {
         $self->{time} = $dstart;
     } else {
-        my @rows = $self->{CPANSTATS}->get_query('array','SELECT max(updated) FROM metabase.metabase');
+        my @rows = $self->{METABASE}->get_query('array','SELECT max(updated) FROM metabase');
         $self->{time} = $rows[0]->[0]	if(@rows);
 
         $self->{time} ||= '1999-01-01T00:00:00Z';
@@ -380,7 +392,7 @@ sub get_next_guids {
 
 sub already_saved {
     my ($self,$guid) = @_;
-    my @rows = $self->{CPANSTATS}->get_query('array','SELECT id FROM metabase WHERE guid=?',$guid);
+    my @rows = $self->{METABASE}->get_query('array','SELECT id FROM metabase WHERE guid=?',$guid);
     return 1	if(@rows);
     return 0;
 }
@@ -524,7 +536,7 @@ sub reparse_report {
 
 sub retrieve_report {
     my $self = shift;
-    my $quid = shift or return;
+    my $guid = shift or return;
 
     my @rows = $self->{CPANSTATS}->get_query('hash','SELECT * FROM cpanstats WHERE guid=?',$guid);
     return $rows[0] if(@rows);
@@ -543,7 +555,7 @@ sub store_report {
         'SELECT' => {
             CPANSTATS => 'SELECT id FROM cpanstats WHERE guid=?',
             LITESTATS => 'SELECT id FROM cpanstats WHERE guid=?',
-            RELEASE   => 'SELECT id FROM release_date WHERE guid=?',
+            RELEASE   => 'SELECT id FROM release_data WHERE guid=?',
         },
         'INSERT' => {
             CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
@@ -592,7 +604,8 @@ sub store_report {
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
 
-        my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields[0]);
+        my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields[1]);
+        #print STDERR "# select release $SQL{SELECT}{RELEASE},$fields[1]\n";
         if(@rows) {
             if($self->{reparse}) {
                 $self->{CPANSTATS}->do_query($SQL{UPDATE}{RELEASE},
@@ -613,6 +626,7 @@ sub store_report {
                     $fields[1]);    # guid
             }
         } else {
+        #print STDERR "# insert release $SQL{INSERT}{RELEASE},$fields[0],$fields[1]\n";
             $self->{CPANSTATS}->do_query($SQL{INSERT}{RELEASE},
                 $fields[0],$fields[1],  # id, guid
                 $fields[5],$fields[6],  # dist, version
@@ -641,7 +655,7 @@ sub cache_report {
     my $self = shift;
     return  unless($self->{report}{guid} && $self->{report}{metabase});
 
-    $self->{'CPANSTATS'}->do_query('INSERT IGNORE INTO metabase.metabase (guid,id,updated,report) VALUES (?,?,?,?)',
+    $self->{'METABASE'}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report) VALUES (?,?,?,?)',
         $self->{report}{guid},$self->{report}{id},$self->{report}{updated},encode_json($self->{report}{metabase}));
 
     if((++$self->{meta_count} % 500) == 0) {
@@ -655,7 +669,7 @@ sub cache_update {
     my $self = shift;
     return  unless($self->{report}{guid} && $self->{report}{id});
 
-    $self->{'CPANSTATS'}->do_query('UPDATE metabase.metabase SET id=? WHERE guid=?',$self->{report}{id},$self->{report}{guid});
+    $self->{'METABASE'}->do_query('UPDATE metabase SET id=? WHERE guid=?',$self->{report}{id},$self->{report}{guid});
 
     if((++$self->{meta_count} % 500) == 0) {
         $self->{CPANSTATS}->do_commit;
@@ -670,9 +684,9 @@ sub cache_update {
 sub _get_createdate {
     my ($self,$guid,$date) = @_;
 
-    return  unless($guid && $date);
+    return  unless($guid || $date);
     if($guid) {
-        my @rows = $self->{CPANSTATS}->get_query('hash','SELECT updated FROM metabase.metabase WHERE guid=?',$guid);
+        my @rows = $self->{METABASE}->get_query('hash','SELECT updated FROM metabase WHERE guid=?',$guid);
         $date = $rows[0]->{updated}  if(@rows);
     }
 
@@ -703,7 +717,7 @@ sub _get_tester {
     $name ||= 'NONAME'; # shouldn't happen, but allows for checks later
 
     for my $em (@emails) {
-        $self->{CPANSTATS}->do_query('INSERT INTO metabase.testers_email (resource,fullname,email) VALUES (?,?,?)',$creator,$name,$em);
+        $self->{METABASE}->do_query('INSERT INTO testers_email (resource,fullname,email) VALUES (?,?,?)',$creator,$name,$em);
     }
 
     $testers{$creator} = @emails ? $emails[0] : $creator;
@@ -727,7 +741,7 @@ sub _valid_field {
 sub _get_lastid {
     my $self = shift;
 
-    my @rows = $self->{CPANSTATS}->get_query('array',"SELECT max(id) FROM metabase.metabase");
+    my @rows = $self->{METABASE}->get_query('array',"SELECT max(id) FROM metabase");
     return 0    unless(@rows);
     return $rows[0]->[0] || 0;
 }

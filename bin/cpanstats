@@ -28,8 +28,9 @@ my $t = CPAN::Testers::Data::Generator->new(
     logfile     => $options{log},
 );
 
-if($options{rebuild})		{ $t->rebuild( map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
-elsif($options{reparse})	{ $t->reparse( $options{reparse} ); }
+if($options{regenerate})	{ $t->regenerate( map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
+elsif($options{rebuild})	{ $t->rebuild(	  map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
+elsif($options{reparse})	{ $t->reparse(  $options{reparse} ); }
 else				{ $t->generate( $options{nonstop} ); }
 
 # -------------------------------------
@@ -41,6 +42,7 @@ sub init_options {
 	'log|l=s',
         'nonstop|n',
 
+        'regenerate',
         'rebuild',
         'gstart=s',
         'gend=s',
@@ -66,6 +68,7 @@ sub _help {
 Usage: $0 \
          [-c=<file>] [-log=<file>] \
 	 [--rebuild ( --gstart=s [--gend=s]] | --dstart=s [--dend=s]] ) \
+	 [--regenerate ( --gstart=s [--gend=s]] | --dstart=s [--dend=s]] ) \
 	 [--reparse=s]
          [-n] [-h] [-v]
 
@@ -78,6 +81,8 @@ Usage: $0 \
   --gend         end rebuild at guid
   --dstart       start rebuild from date (YYYY-MM-DDThh-mm-ssZ)
   --dend         end rebuild at date (YYYY-MM-DDThh-mm-ssZ)
+
+  --regenerate   regenerate between two dates/guids.
 
   --reparse      reparse a specific guid from the metabase
 
@@ -96,7 +101,7 @@ __END__
 
 =head1 NAME
 
-cpanstats - script to access the NNTP server and update the database.
+cpanstats - script to access the Metabase server and update the database.
 
 =head1 SYNOPSIS
 
@@ -110,9 +115,13 @@ cpanstats - script to access the NNTP server and update the database.
   # rebuild default database from local cache
   cpanstats -c=data/settings.ini --rebuild	# rebuild entire local dataset
   cpanstats -c=data/settings.ini --rebuild --gstart=$guid1
-  cpanstats -c=data/settings.ini --rebuild --gstart=$guid1 --end=$guid2
+  cpanstats -c=data/settings.ini --rebuild --gstart=$guid1 --gend=$guid2
   cpanstats -c=data/settings.ini --rebuild --dstart=$date1
-  cpanstats -c=data/settings.ini --rebuild --dstart=$date1 --end=$date2
+  cpanstats -c=data/settings.ini --rebuild --dstart=$date1 --dend=$date2
+
+  # regenerate reports between to given points
+  cpanstats -c=data/settings.ini --regenerate --gstart=$guid1 --gend=$guid2
+  cpanstats -c=data/settings.ini --regenerate --dstart=$date1 --dend=$date2
   
   # reparse a single report from remote metabase
   cpanstats -c=data/settings.ini --reparse=$guid1

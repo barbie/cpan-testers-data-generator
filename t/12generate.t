@@ -15,7 +15,7 @@ use Test::More;
 
 my (%options,$meta);
 my $config = './t/test-config.ini';
-my $TESTS = 43;
+my $TESTS = 49;
 
 #----------------------------------------------------------------------------
 # Test Conditions
@@ -217,6 +217,7 @@ my @create_meta_sqlite = (
             'CREATE TABLE metabase (
                 id          INTEGER PRIMARY KEY,
                 guid        INTEGER,
+                updated     TEXT,
                 report      TEXT)',
             'CREATE INDEX guid ON metabase (guid)',
 
@@ -233,7 +234,8 @@ my @create_meta_mysql = (
             'CREATE TABLE metabase (
                 id          int(10) unsigned NOT NULL,
                 guid        char(36) NOT NULL,
-                report      blob,
+                updated     varchar(32) default NULL,
+                report      longblob NOT NULL,
                 PRIMARY KEY (id),
                 INDEX guid (guid)
             )',
@@ -295,7 +297,7 @@ ok(!-f $directory . '/cpanstats.db', '.. dbs not created yet');
 ok(!-f $directory . '/litestats.db');
 ok(!-f $directory . '/metabase.db');
 
-is(create_db(0), 0, '.. dbs created');
+is(create_db(0), 0, '.. dbs created [STAGE 1]');
 
 ok(-f $directory . '/cpanstats.db', '.. dbs created');
 ok(-f $directory . '/litestats.db');
@@ -350,7 +352,7 @@ ok(!-f $directory . '/cpanstats.db', '.. dbs not created yet');
 ok(!-f $directory . '/litestats.db');
 ok(!-f $directory . '/metabase.db');
 
-is(create_db(0), 0, '.. dbs created');
+is(create_db(0), 0, '.. dbs created [STAGE 2]');
 
 ok(-f $directory . '/cpanstats.db', '.. dbs created');
 ok(-f $directory . '/litestats.db');
@@ -371,7 +373,7 @@ is(create_metabase(0), 0, '.. metabase created');
     );
 
     # everything should still be there
-    ok(-f $directory . '/cpanstats.db','.. dbs still there');
+    ok(-f $directory . '/cpanstats.db','.. dbs still there [STAGE 3]');
     ok(-f $directory . '/metabase.db');
 
     my $size = -s $directory . '/cpanstats.db';
@@ -404,7 +406,7 @@ is(create_metabase(0), 0, '.. metabase created');
     );
 
     # everything should still be there
-    ok(-f $directory . '/cpanstats.db','.. dbs still there');
+    ok(-f $directory . '/cpanstats.db','.. dbs still there [STAGE 4]');
     ok(-f $directory . '/cpanstats.log');
     ok(-f $directory . '/metabase.db');
 
@@ -421,13 +423,8 @@ is(create_metabase(0), 0, '.. metabase created');
 ## Test we don't reparse anything that doesn't already exist
 
 {
-    my $t = CPAN::Testers::Data::Generator->new(
-        config  => $config,
-        logfile => $directory . '/cpanstats.log'
-    );
-
     # everything should still be there
-    ok(-f $directory . '/cpanstats.db','.. dbs still there');
+    ok(-f $directory . '/cpanstats.db','.. dbs still there [STAGE 5]');
     ok(-f $directory . '/cpanstats.log');
     ok(-f $directory . '/metabase.db');
 
@@ -439,9 +436,42 @@ is(create_metabase(0), 0, '.. metabase created');
     is($c1-1,$c2,'... removed 1 article');
 
     # recreate the stats database locally
+    my $t = CPAN::Testers::Data::Generator->new(
+        config  => $config,
+        logfile => $directory . '/cpanstats.log'
+    );
+
     $t->reparse({localonly => 1},1,2);
     my $c3 = getMetabaseCount();
-    is($c2,$c3,'... no more or less articles');
+    is($c2,$c3,'... no more or less reports');
+
+    # check stats database is again the same size as before
+    ok(-f $directory . '/cpanstats.db');
+    is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
+}
+
+## Test we can regenerate anything that doesn't already exist
+
+{
+    # everything should still be there
+    ok(-f $directory . '/cpanstats.db','.. dbs still there [STAGE 6]');
+    ok(-f $directory . '/cpanstats.log');
+    ok(-f $directory . '/metabase.db');
+
+    my $size = -s $directory . '/cpanstats.db';
+
+    my $c1 = getMetabaseCount();
+
+    # recreate the stats database locally
+    my $t = CPAN::Testers::Data::Generator->new(
+        config  => $config,
+        logfile => $directory . '/cpanstats.log'
+    );
+
+    $t->regenerate({ddate => '2000-01-01T00:00:00Z', dend => '2010-09-01T00:00:00Z'});
+
+    my $c2 = getMetabaseCount();
+    is($c1,$c2,'... no more or less reports');
 
     # check stats database is again the same size as before
     ok(-f $directory . '/cpanstats.db');

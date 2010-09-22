@@ -21,6 +21,9 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
 	- major update of all SQL tables and databases
             examples/cpanstats-createdb		(v0.02)
 	- added META.json
+	- added regenerate() and retrieve_report() methods.
+	- added regenerate option and documentation:
+            bin/cpanstats			(v1.00)
 
 0.41    18/03/2010
 	- fixes to change the 'id' (was NNTP ID) to an auto incremental field.
