@@ -142,7 +142,7 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
 
             if(my $report = $self->get_fact($guid)) {
                 $self->{report}{guid}   = $guid;
-                next    if($self->parse_report(report => $report));
+                next    if($self->parse_report(report => $report)); # true if invalid report
 
                 if($self->store_report()) { $self->_log(".. stored"); $stored++; }
                 else                      {
@@ -153,7 +153,7 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
                     $self->_log(".. already stored");
                 }
                 if($self->cache_report()) { $self->_log(".. cached\n"); $cached++; }
-                else                      { $self->_log(".. already cached\n"); }
+                else                      { $self->_log(".. bad cache data\n"); }
             } else {
                 $self->_log(".. FAIL\n");
             }
@@ -219,12 +219,12 @@ $self->_log("dstart=$hash->{dstart}, dend=$hash->{dend}\n");
                 if(my $report = $self->get_fact($guid)) {
                     $start = $report->{metadata}{core}{update_time};
                     $self->{report}{guid}   = $guid;
-                    next    if($self->parse_report(report => $report));
+                    next    if($self->parse_report(report => $report)); # true if invalid report
 
                     if($self->store_report()) { $self->_log(".. stored"); $stored++;    }
                     else                      { $self->_log(".. already stored");       }
                     if($self->cache_report()) { $self->_log(".. cached\n"); $cached++;  }
-                    else                      { $self->_log(".. already cached\n");     }
+                    else                      { $self->_log(".. bad cache data\n");     }
                 } else {
                     $self->_log(".. FAIL\n");
                 }
@@ -291,10 +291,18 @@ $self->_log("START REBUILD\n");
         $self->{report}{id}       = $row->{id};
         $self->{report}{guid}     = $row->{guid};
         $self->{report}{metabase} = decode_json($row->{report});
-        $self->reparse_report();
-        $self->store_report();
-        $self->cache_update();
-        $self->_log(".. stored\n");
+
+        # corrupt cached report?
+        if($self->reparse_report()) { # true if invalid report
+            $self->_log(".. cannot parse metabase cache report\n");
+            warn "Cannot parse cached report [$row->{id},$row->{guid}]\n";
+            next;
+        }
+
+        if($self->store_report())   { $self->_log(".. cpanstats stored\n") }
+        else                        { $self->_log(".. cpanstats not stored\n") }
+        if($self->cache_update())   { $self->_log(".. metabase stored\n") }
+        else                        { $self->_log(".. bad metabase cache data\n") }
 
         $stored++;
         $cached++;
@@ -310,33 +318,36 @@ $self->_log("STOP REBUILD\n");
 
 sub reparse {
     my ($self,$guid) = @_;
+$self->_log("START REPARSE [$guid]\n");
     return  unless($guid);
 
     $self->{reparse} = 1;
 
     if(my $report = $self->get_fact($guid)) {
         $self->{report}{guid} = $guid;
-        if($self->parse_report(report => $report)) {
-            $self->_log(".. cannot parse report\n");
-            return;
+        if($self->parse_report(report => $report)) { # true if invalid report
+            $self->_log(".. cannot parse report [$guid]\n");
+            return 0;
         }
 
         if($self->store_report()) { $self->_log(".. stored"); }
         else                      {
             if($self->{time} gt $self->{report}{updated}) {
                 $self->_log(".. FAIL: older than requested [$self->{time}]\n");
-                return;
+                return 0;
             }
             $self->_log(".. already stored");
         }
         if($self->cache_report()) { $self->_log(".. cached\n"); }
-        else                      { $self->_log(".. already cached\n"); }
+        else                      { $self->_log(".. FAIL: bad cache data\n"); }
     } else {
         $self->_log(".. FAIL\n");
-        return;
+        return 0;
     }
 
     $self->commit();
+$self->_log("STOP REPARSE [$guid]\n");
+    return 1;
 }
 
 #----------------------------------------------------------------------------
@@ -384,9 +395,7 @@ sub get_next_guids {
     };
 
     $self->_log(" ... Metabase Search Failed [$@]\n") if($@);
-    #if($guids) {
-        $self->_log("START guids=[".scalar(@$guids)."]\n");
-    #}
+    $self->_log("Retrieved ".($guids ? scalar(@$guids) : 0)." guids\n");
 
     return $guids;
 }
@@ -526,13 +535,15 @@ sub reparse_report {
         $self->{report}{type}   = 3;
     }
 
-    return  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));
-    return  unless($self->_valid_field($guid, 'version'  => $self->{report}{version})  || ($options && $options->{exclude}{version}));
-    return  unless($self->_valid_field($guid, 'from'     => $self->{report}{from})     || ($options && $options->{exclude}{from}));
-    return  unless($self->_valid_field($guid, 'perl'     => $self->{report}{perl})     || ($options && $options->{exclude}{perl}));
-    return  unless($self->_valid_field($guid, 'platform' => $self->{report}{platform}) || ($options && $options->{exclude}{platform}));
-    return  unless($self->_valid_field($guid, 'osname'   => $self->{report}{osname})   || ($options && $options->{exclude}{osname}));
-    return  unless($self->_valid_field($guid, 'osvers'   => $self->{report}{osvers})   || ($options && $options->{exclude}{osname}));
+    return 1  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));
+    return 1  unless($self->_valid_field($guid, 'version'  => $self->{report}{version})  || ($options && $options->{exclude}{version}));
+    return 1  unless($self->_valid_field($guid, 'from'     => $self->{report}{from})     || ($options && $options->{exclude}{from}));
+    return 1  unless($self->_valid_field($guid, 'perl'     => $self->{report}{perl})     || ($options && $options->{exclude}{perl}));
+    return 1  unless($self->_valid_field($guid, 'platform' => $self->{report}{platform}) || ($options && $options->{exclude}{platform}));
+    return 1  unless($self->_valid_field($guid, 'osname'   => $self->{report}{osname})   || ($options && $options->{exclude}{osname}));
+    return 1  unless($self->_valid_field($guid, 'osvers'   => $self->{report}{osvers})   || ($options && $options->{exclude}{osname}));
+
+    return 0;
 }
 
 sub retrieve_report {

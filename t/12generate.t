@@ -16,7 +16,7 @@ use Test::More;
 
 my (%options,$meta);
 my $config = './t/test-config.ini';
-my $TESTS = 57;
+my $TESTS = 61;
 
 #----------------------------------------------------------------------------
 # Test Conditions
@@ -373,33 +373,6 @@ is(create_db(2), 0, '.. dbs prepped');
 
 is(create_metabase(0), 0, '.. metabase created');
 
-# TEST INTERNALS
-
-{
-    testMetabaseRecords();
-
-    my $c1 = getMetabaseCount();
-    is($c1,5,'Internal Tests, metabase contains 5 reports');
-
-    my $t = CPAN::Testers::Data::Generator->new(
-        config  => $config,
-        logfile => $directory . '/cpanstats.log'
-    );
-
-    my @test_dates = (
-        [ undef, '', '' ],
-        [ undef, 'xxx', '' ],
-        [ undef, '', 'xxx' ],
-        [ '2000-01-01T00:00:00Z', '', '2000-01-01T00:00:00Z' ],
-        [ '2010-09-13T03:20:00Z', undef, '2010-09-13T03:20:00Z' ],
-        [ '2010-03-21T17:39:05Z', 'a58945f6-3510-11df-89c9-1bb9c3681c0d', '' ],
-    );
-
-    for my $test (@test_dates) {
-        is($t->_get_createdate($test->[1],$test->[2]),$test->[0], ".. test date [".($test->[0]||'undef')."]"); 
-    }
-}
-
 ## Test we can rebuild
 
 {
@@ -431,6 +404,41 @@ is(create_metabase(0), 0, '.. metabase created');
     ok(-f $directory . '/cpanstats.db');
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
     ok(-f $directory . '/cpanstats.log');
+}
+
+# TEST INTERNALS
+
+{
+    testMetabaseRecords();
+
+    my $c1 = getMetabaseCount();
+    is($c1,5,'Internal Tests, metabase contains 5 reports');
+
+    my $t = CPAN::Testers::Data::Generator->new(
+        config  => $config,
+        logfile => $directory . '/cpanstats.log'
+    );
+
+    my @test_dates = (
+        [ undef, '', '' ],
+        [ undef, 'xxx', '' ],
+        [ undef, '', 'xxx' ],
+        [ '2000-01-01T00:00:00Z', '', '2000-01-01T00:00:00Z' ],
+        [ '2010-09-13T03:20:00Z', undef, '2010-09-13T03:20:00Z' ],
+        [ '2010-03-21T17:39:05Z', 'a58945f6-3510-11df-89c9-1bb9c3681c0d', '' ],
+    );
+
+    for my $test (@test_dates) {
+        is($t->_get_createdate($test->[1],$test->[2]),$test->[0], ".. test date [".($test->[0]||'undef')."]"); 
+    }
+
+    is($t->already_saved('a58945f7-3510-11df-89c9-1bb9c3681c0d'),0,'.. missing metabase guid');
+    is($t->already_saved('a58945f6-3510-11df-89c9-1bb9c3681c0d'),1,'.. found metabase guid');
+
+    is($t->retrieve_report('a58945f7-3510-11df-89c9-1bb9c3681c0d'),undef,'.. missing cpanstats guid');
+    my $r = $t->retrieve_report('a58945f6-3510-11df-89c9-1bb9c3681c0d');
+    is($r->{guid},'a58945f6-3510-11df-89c9-1bb9c3681c0d','.. found cpanstats guid');
+
 }
 
 ## Test we can reparse
