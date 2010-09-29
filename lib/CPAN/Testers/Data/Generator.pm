@@ -10,12 +10,14 @@ $VERSION = '1.00';
 # Library Modules
 
 use Config::IniFiles;
+use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
 use File::Basename;
 use File::Path;
 use IO::File;
 use JSON;
 use Time::Local;
+use HTML::Entities;
 
 use Metabase    0.004;
 use Metabase::Fact;
@@ -46,6 +48,21 @@ INVALID
 Thanks,
 CPAN Testers Server.
 ';
+
+my $OSNAMES = 'beos|midnightbsd|cygwin|freebsd|netbsd|openbsd|darwin|linux|cygwin|darwin|MSWin32|dragonfly|solaris|MacOS|irix|mirbsd|gnu|bsdos|aix|sco|os2|haiku';
+my %OSNAMES = (
+    'MacPPC'    => 'macos',
+    'osf'       => 'dec_osf',
+    'pa-risc'   => 'hpux',
+    's390'      => 'os390',
+    'VMS_'      => 'vms',
+    'ARCHREV_0' => 'hpux',
+    'linuxThis' => 'linux',
+    'linThis'   => 'linux',
+    'linuThis'  => 'linux',
+    'lThis'     => 'linux',
+    'openThis'  => 'openbsd',
+);
 
 #----------------------------------------------------------------------------
 # The Application Programming Interface
@@ -92,10 +109,12 @@ sub new {
         $testers{$row->{resource}} = $row->{email};
     }
 
+    # build OS names map
     @rows = $self->{CPANSTATS}->get_query('array','SELECT osname,ostitle FROM osname');
     for my $row (@rows) {
         $self->{OSNAMES}{lc $row->[0]} ||= $row->[1];
     }
+    $OSNAMES = join('|',keys %{$self->{OSNAMES}})   if(keys %{$self->{OSNAMES}});
 
     if($cfg->SectionExists('DISABLE')) {
         my @values = $cfg->val('DISABLE','LIST');
@@ -467,6 +486,10 @@ sub parse_report {
         return 1;
     }
 
+    # fixes from metabase formatting
+    $self->{report}{perl} =~ s/^v//;    # no leading 'v'
+    $self->_check_arch_os();
+
     if($self->{report}{created}) {
         my @created = $self->{report}{created} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/; # 2010-02-23T20:33:52Z
         $self->{report}{postdate}   = sprintf "%04d%02d", $created[0], $created[1];
@@ -576,7 +599,7 @@ sub store_report {
         },
         'UPDATE' => {
             CPANSTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
-            LITESTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
+            LITESTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,date=?,type=? WHERE guid=?',
             RELEASE   => 'UPDATE release_data SET id=?,dist=?,version=?,oncpan=?,distmat=?,perlmat=?,patched=?,pass=?,fail=?,na=?,unknown=? WHERE guid=?',
         },
     );
@@ -614,7 +637,7 @@ sub store_report {
         # - note we only update the author if this is the *latest* version of the distribution
         my $author = $self->{report}{pauseid} || $self->_get_author($fields[5],$fields[6]);
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
-        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,1)",$fields[5]);
+        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,2)",$fields[5]);
 
         my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields[1]);
         #print STDERR "# select release $SQL{SELECT}{RELEASE},$fields[1]\n";
@@ -722,7 +745,7 @@ sub _get_tester {
         if(ref $fact eq 'Metabase::User::EmailAddress') {
             push @emails, $fact->{content};
         } elsif(ref $fact eq 'Metabase::User::FullName') {
-            $name = $fact->{content};
+            $name = encode_entities($fact->{content});
         }
     }
 
@@ -777,6 +800,49 @@ sub _osname {
         $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$self->{OSNAMES}{$lname}')});
     }
     return $name;
+}
+
+sub _check_arch_os {
+    my $self = shift;
+
+    my $text = $self->_platform_to_osname($self->{report}{platform});
+#print STDERR "_check: text=$text\n";
+#print STDERR "_check: platform=$self->{report}{platform}\n";
+#print STDERR "_check: osname=$self->{report}{osname}\n";
+    return	if($text && $self->{report}{osname} && lc $text eq lc $self->{report}{osname});
+
+#use Data::Dumper;
+#print STDERR "_check: metabase=".Dumper($self->{report}{metabase})."\n";
+    my $fact = decode_json($self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'}{content});
+    my $textreport = $fact->{textreport};
+
+    # create a fake mail, as CTC::Article parses a mail like text block
+    my $mail = <<EMAIL;
+From: fake\@example.com
+To: fake\@example.com
+Subject: PASS Fake-0.01
+Date: 01-01-2010 01:01:01 Z
+
+$textreport
+EMAIL
+    my $object = CPAN::Testers::Common::Article->new( $mail ) or return;
+    $object->parse_report();
+
+    $self->{report}{osname}   = $object->osname;
+    $self->{report}{platform} = $object->archname;
+}
+
+sub _platform_to_osname {
+    my $self = shift;
+    my $arch = shift;
+
+    return $1	if($arch =~ /$OSNAMES/i);
+
+    for my $rx (keys %OSNAMES) {
+        return $OSNAMES{$rx} if($arch =~ /$rx/i);
+    }
+
+    return '';
 }
 
 sub _send_email {

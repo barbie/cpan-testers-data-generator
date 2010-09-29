@@ -11,6 +11,7 @@ installdirs:              site
 
 requires:
   Config::IniFiles:                   0
+  CPAN::Testers::Common::Article:     0.36
   CPAN::Testers::Common::DBUtils:     0.03
   CPAN::Testers::Fact::LegacyReport:  0
   CPAN::Testers::Fact::TestSummary:   0

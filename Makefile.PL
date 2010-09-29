@@ -7,6 +7,7 @@ WriteMakefile(
         'Getopt::ArgvFile'                  => 0,       # only for scripts
 
         'Config::IniFiles'                  => 0,
+        'CPAN::Testers::Common::Article'    => 0.36,
         'CPAN::Testers::Common::DBUtils'    => 0.03,
         'File::Basename'                    => 0,
         'File::Path'                        => 0,
