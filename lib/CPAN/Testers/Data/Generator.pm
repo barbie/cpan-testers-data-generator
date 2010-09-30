@@ -49,7 +49,7 @@ Thanks,
 CPAN Testers Server.
 ';
 
-my $OSNAMES = 'beos|midnightbsd|cygwin|freebsd|netbsd|openbsd|darwin|linux|cygwin|darwin|MSWin32|dragonfly|solaris|MacOS|irix|mirbsd|gnu|bsdos|aix|sco|os2|haiku';
+my $OSNAMES;
 my %OSNAMES = (
     'MacPPC'    => 'macos',
     'osf'       => 'dec_osf',
@@ -795,11 +795,13 @@ sub _oncpan {
 sub _osname {
     my ($self,$name) = @_;
     my $lname = lc $name;
-    unless($self->{OSNAMES}{$lname}) {
-        $self->{OSNAMES}{$lname} = uc($name);
-        $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$self->{OSNAMES}{$lname}')});
-    }
-    return $name;
+    my $uname = uc $name;
+    $self->{OSNAMES}{$lname} ||= do {
+        $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$uname')});
+        $uname;
+    };
+
+    return $self->{OSNAMES}{$lname};
 }
 
 sub _check_arch_os {
@@ -834,9 +836,11 @@ EMAIL
 
 sub _platform_to_osname {
     my $self = shift;
-    my $arch = shift;
+    my $arch = shift || return '';
 
-    return $1	if($arch =~ /$OSNAMES/i);
+    $OSNAMES = join('|',keys %{$self->{OSNAMES}})   if(keys %{$self->{OSNAMES}});
+
+    return $1	if($arch =~ /($OSNAMES)/i);
 
     for my $rx (keys %OSNAMES) {
         return $OSNAMES{$rx} if($arch =~ /$rx/i);

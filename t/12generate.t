@@ -16,7 +16,7 @@ use Test::More;
 
 my (%options,$meta);
 my $config = './t/test-config.ini';
-my $TESTS = 61;
+my $TESTS = 70;
 
 #----------------------------------------------------------------------------
 # Test Conditions
@@ -121,7 +121,31 @@ my @create_sqlite = (
                 ostitle     TEXT
             )',
 
-            "INSERT INTO osname VALUES (1,'linux','Linux')"
+            "INSERT INTO osname VALUES (1,'aix','AIX')",
+            "INSERT INTO osname VALUES (2,'bsdos','BSD/OS')",
+            "INSERT INTO osname VALUES (3,'cygwin','Windows(Cygwin)')",
+            "INSERT INTO osname VALUES (4,'darwin','MacOSX')",
+            "INSERT INTO osname VALUES (5,'dec_osf','Tru64')",
+            "INSERT INTO osname VALUES (6,'dragonfly','DragonflyBSD')",
+            "INSERT INTO osname VALUES (7,'freebsd','FreeBSD')",
+            "INSERT INTO osname VALUES (8,'gnu','GNUHurd')",
+            "INSERT INTO osname VALUES (9,'haiku','Haiku')",
+            "INSERT INTO osname VALUES (10,'hpux','HP-UX')",
+            "INSERT INTO osname VALUES (11,'irix','IRIX')",
+            "INSERT INTO osname VALUES (12,'linux','Linux')",
+            "INSERT INTO osname VALUES (13,'macos','MacOSclassic')",
+            "INSERT INTO osname VALUES (14,'midnightbsd','MidnightBSD')",
+            "INSERT INTO osname VALUES (15,'mirbsd','MirOSBSD')",
+            "INSERT INTO osname VALUES (16,'mswin32','Windows(Win32)')",
+            "INSERT INTO osname VALUES (17,'netbsd','NetBSD')",
+            "INSERT INTO osname VALUES (18,'openbsd','OpenBSD')",
+            "INSERT INTO osname VALUES (19,'os2','OS/2')",
+            "INSERT INTO osname VALUES (20,'os390','OS390/zOS')",
+            "INSERT INTO osname VALUES (21,'osf','OSF')",
+            "INSERT INTO osname VALUES (22,'sco','SCO')",
+            "INSERT INTO osname VALUES (24,'vms','VMS')",
+            "INSERT INTO osname VALUES (23,'solaris','SunOS/Solaris')",
+            "INSERT INTO osname VALUES (25,'beos','BeOS')"
 );
 
 my @create_mysql = (
@@ -210,7 +234,31 @@ my @create_mysql = (
                 PRIMARY KEY (id)
             )',
 
-            "INSERT INTO osname VALUES (1,'linux','Linux')"
+            "INSERT INTO osname VALUES (1,'aix','AIX')",
+            "INSERT INTO osname VALUES (2,'bsdos','BSD/OS')",
+            "INSERT INTO osname VALUES (3,'cygwin','Windows(Cygwin)')",
+            "INSERT INTO osname VALUES (4,'darwin','MacOSX')",
+            "INSERT INTO osname VALUES (5,'dec_osf','Tru64')",
+            "INSERT INTO osname VALUES (6,'dragonfly','DragonflyBSD')",
+            "INSERT INTO osname VALUES (7,'freebsd','FreeBSD')",
+            "INSERT INTO osname VALUES (8,'gnu','GNUHurd')",
+            "INSERT INTO osname VALUES (9,'haiku','Haiku')",
+            "INSERT INTO osname VALUES (10,'hpux','HP-UX')",
+            "INSERT INTO osname VALUES (11,'irix','IRIX')",
+            "INSERT INTO osname VALUES (12,'linux','Linux')",
+            "INSERT INTO osname VALUES (13,'macos','MacOSclassic')",
+            "INSERT INTO osname VALUES (14,'midnightbsd','MidnightBSD')",
+            "INSERT INTO osname VALUES (15,'mirbsd','MirOSBSD')",
+            "INSERT INTO osname VALUES (16,'mswin32','Windows(Win32)')",
+            "INSERT INTO osname VALUES (17,'netbsd','NetBSD')",
+            "INSERT INTO osname VALUES (18,'openbsd','OpenBSD')",
+            "INSERT INTO osname VALUES (19,'os2','OS/2')",
+            "INSERT INTO osname VALUES (20,'os390','OS390/zOS')",
+            "INSERT INTO osname VALUES (21,'osf','OSF')",
+            "INSERT INTO osname VALUES (22,'sco','SCO')",
+            "INSERT INTO osname VALUES (24,'vms','VMS')",
+            "INSERT INTO osname VALUES (23,'solaris','SunOS/Solaris')",
+            "INSERT INTO osname VALUES (25,'beos','BeOS')",
 );
 
 my @create_meta_sqlite = (
@@ -439,6 +487,28 @@ is(create_metabase(0), 0, '.. metabase created');
     my $r = $t->retrieve_report('a58945f6-3510-11df-89c9-1bb9c3681c0d');
     is($r->{guid},'a58945f6-3510-11df-89c9-1bb9c3681c0d','.. found cpanstats guid');
 
+    $options{CPANSTATS} ||= config_db('CPANSTATS');
+    my @rows = $options{CPANSTATS}->{dbh}->get_query('array','SELECT count(id) FROM osname');
+    is($rows[0]->[0],25,'.. all OS names');
+
+    is($t->_platform_to_osname('linux'),'linux','.. known OS');
+    is($t->_platform_to_osname('linuxThis'),'linux','.. known mispelling');
+    is($t->_platform_to_osname('unknown'),'','.. unknown OS');
+
+    is($t->_osname('LINUX'),'Linux','.. known OS fixed case');
+    is($t->_osname('Unknown'),'UNKNOWN','.. save unknown OS');
+    is($t->_platform_to_osname('unknown'),'unknown','.. unknown is now known OS');
+
+    my $json;
+    my $fh = IO::File->new("t/data/ad3189d0-3510-11df-89c9-1bb9c3681c0d.json") or die diag("$!");
+    while(<$fh>) { $json .= $_ }
+    $fh->close;
+
+    my $text = decode_json($json);
+    $t->{report}{metabase} = $text;
+    $t->_check_arch_os();
+    is($t->{report}{osname},'linux','.. set OS');
+    is($t->{report}{platform},'i686-linux-thread-multi-64int','.. set platform');
 }
 
 ## Test we can reparse
