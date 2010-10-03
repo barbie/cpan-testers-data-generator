@@ -16,7 +16,7 @@ use Test::More;
 
 my (%options,$meta);
 my $config = './t/test-config.ini';
-my $TESTS = 70;
+my $TESTS = 71;
 
 #----------------------------------------------------------------------------
 # Test Conditions
@@ -145,7 +145,21 @@ my @create_sqlite = (
             "INSERT INTO osname VALUES (22,'sco','SCO')",
             "INSERT INTO osname VALUES (24,'vms','VMS')",
             "INSERT INTO osname VALUES (23,'solaris','SunOS/Solaris')",
-            "INSERT INTO osname VALUES (25,'beos','BeOS')"
+            "INSERT INTO osname VALUES (25,'beos','BeOS')",
+
+            'DROP TABLE IF EXISTS perl_version',
+            'CREATE TABLE perl_version (
+              version	    TEXT    default NULL,
+              perl	        TEXT    default NULL,
+              patch	        INTEGER default 0,
+              devel	        INTEGER default 0,
+              PRIMARY KEY  (version)
+            )',
+
+            "INSERT INTO perl_version VALUES ('5.10.0','5.10.0',0,0)",
+            "INSERT INTO perl_version VALUES ('5.11.0','5.11.0',0,1)",
+            "INSERT INTO perl_version VALUES ('v5.10.0','5.10.0',0,0)",
+            "INSERT INTO perl_version VALUES ('5.12.0 RC1','5.12.0',1,0)"
 );
 
 my @create_mysql = (
@@ -259,6 +273,20 @@ my @create_mysql = (
             "INSERT INTO osname VALUES (24,'vms','VMS')",
             "INSERT INTO osname VALUES (23,'solaris','SunOS/Solaris')",
             "INSERT INTO osname VALUES (25,'beos','BeOS')",
+
+            'DROP TABLE IF EXISTS perl_version',
+            'CREATE TABLE perl_version (
+              version	    varchar(255) default NULL,
+              perl	        varchar(32)  default NULL,
+              patch	        tinyint(1)   default 0,
+              devel	        tinyint(1)   default 0,
+              PRIMARY KEY  (version)
+            )',
+
+            "INSERT INTO perl_version VALUES ('5.10.0','5.10.0',0,0)",
+            "INSERT INTO perl_version VALUES ('5.11.0','5.11.0',0,1)",
+            "INSERT INTO perl_version VALUES ('v5.10.0','5.10.0',0,0)",
+            "INSERT INTO perl_version VALUES ('5.12.0 RC1','5.12.0',1,0)"
 );
 
 my @create_meta_sqlite = (
@@ -321,6 +349,14 @@ my @delete_meta_sqlite = (
 
 my @delete_meta_mysql = (
             'DELETE FROM metabase'
+);
+
+my @test_stat_rows = (
+[ 1, 'a58945f6-3510-11df-89c9-1bb9c3681c0d' ],
+[ 2, 'ad3189d0-3510-11df-89c9-1bb9c3681c0d' ],
+[ 3, 'af820e12-3510-11df-89c9-1bb9c3681c0d' ],
+[ 4, 'b248f71e-3510-11df-89c9-1bb9c3681c0d' ],
+[ 5, 'b77e7132-3510-11df-89c9-1bb9c3681c0d' ]
 );
 
 my @test_meta_rows = (
@@ -457,6 +493,7 @@ is(create_metabase(0), 0, '.. metabase created');
 # TEST INTERNALS
 
 {
+    testCpanstatsRecords();
     testMetabaseRecords();
 
     my $c1 = getMetabaseCount();
@@ -717,6 +754,12 @@ sub create_metabase {
     $fh->close;
 
     return 0;
+}
+
+sub testCpanstatsRecords {
+    $options{CPANSTATS} ||= config_db('CPANSTATS');
+    my @rows = $options{CPANSTATS}->{dbh}->get_query('array','SELECT id,guid FROM cpanstats');
+    is_deeply(\@rows,\@test_stat_rows,'.. test cpanstats rows');
 }
 
 sub testMetabaseRecords {

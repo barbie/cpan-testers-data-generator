@@ -579,12 +579,15 @@ sub retrieve_report {
 }
 
 sub store_report {
-    my $self = shift;
+    my $self    = shift;
+    my @fields  = qw(guid state postdate from dist version platform perl osname osvers fulldate type);
 
-    my @fields = map {$self->{report}{$_}} qw(guid state postdate from dist version platform perl osname osvers fulldate type);
-    $fields[$_] ||= 0   for(11);
-    $fields[$_] ||= ''  for(0,1,2,3,4,5,6,7,8,9,10);
-    $fields[$_] ||= '0' for(7);
+    my %fields = map {$_ => $self->{report}{$_}} @fields;
+    $fields{$_} ||= 0   for(qw(type));
+    $fields{$_} ||= '0' for(qw(perl));
+    $fields{$_} ||= ''  for(@fields);
+
+    my @values = map {$fields{$_}} @fields;
 
     my %SQL = (
         'SELECT' => {
@@ -605,83 +608,85 @@ sub store_report {
     );
 
     # update the mysql database
-    my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{CPANSTATS},$fields[0]);
+    my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{CPANSTATS},$values[0]);
     if(@rows) {
         if($self->{reparse}) {
-            my ($guid,@update) = @fields;
+            my ($guid,@update) = @values;
             $self->{CPANSTATS}->do_query($SQL{UPDATE}{CPANSTATS},@update,$guid);
         } else {
             $self->{report}{id} = $rows[0]->[0];
             return 0;
         }
     } else {
-        $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{CPANSTATS},@fields);
+        $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{CPANSTATS},@values);
     }
 
     # update the sqlite database
-    @rows = $self->{LITESTATS}->get_query('array',$SQL{SELECT}{LITESTATS},$fields[0]);
+    @rows = $self->{LITESTATS}->get_query('array',$SQL{SELECT}{LITESTATS},$values[0]);
     if(@rows) {
         if($self->{reparse}) {
-            my ($guid,@update) = @fields;
+            my ($guid,@update) = @values;
             $self->{LITESTATS}->do_query($SQL{UPDATE}{LITESTATS},@update,$guid);
         }
     } else {
-        $self->{LITESTATS}->do_query($SQL{INSERT}{LITESTATS},$self->{report}{id},@fields);
+        $self->{LITESTATS}->do_query($SQL{INSERT}{LITESTATS},$self->{report}{id},@values);
     }
 
     # update perl version table
-    my $patch  = $fields[8] =~ /^5.(7|9|[1-9][13579])/   ? 1 : 0,    # odd numbers now mark development releases
-    my $devel  = $fields[8] =~ /(RC\d+|patch)/           ? 1 : 0,
-    my ($perl) = $fields[8] =~ /(5\.\d+(?:\.\d+)?)/;
-    $self->{CPANSTATS}->do_query("INSERT IGNORE INTO perl_version (version,perl,patch,devel) VALUES (?,?,?,?)",$fields[8],$perl,$patch,$devel);
+    my $patch  = $fields{perl} =~ /^5.(7|9|[1-9][13579])/   ? 1 : 0,    # odd numbers now mark development releases
+    my $devel  = $fields{perl} =~ /(RC\d+|patch)/           ? 1 : 0,
+    my ($perl) = $fields{perl} =~ /(5\.\d+(?:\.\d+)?)/;
+    unless($self->{CPANSTATS}->get_query('array',"SELECT * FROM perl_version WHERE version=?",$fields{perl})) {
+        $self->{CPANSTATS}->do_query("INSERT INTO perl_version (version,perl,patch,devel) VALUES (?,?,?,?)",$fields{perl},$perl,$patch,$devel);
+    }
 
     # only valid reports
     if($self->{report}{type} == 2) {
-        unshift @fields, $self->{report}{id};
+        $fields{id} =  $self->{report}{id};
 
         # push page requests
         # - note we only update the author if this is the *latest* version of the distribution
-        my $author = $self->{report}{pauseid} || $self->_get_author($fields[5],$fields[6]);
+        my $author = $self->{report}{pauseid} || $self->_get_author($fields{dist},$fields{version});
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
-        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,2)",$fields[5]);
+        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,2)",$fields{dist});
 
-        my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields[1]);
-        #print STDERR "# select release $SQL{SELECT}{RELEASE},$fields[1]\n";
+        my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields{guid});
+        #print STDERR "# select release $SQL{SELECT}{RELEASE},$fields{guid}\n";
         if(@rows) {
             if($self->{reparse}) {
                 $self->{CPANSTATS}->do_query($SQL{UPDATE}{RELEASE},
-                    $fields[0],             # id,
-                    $fields[5],$fields[6],  # dist, version
+                    $fields{id},                        # id,
+                    $fields{dist},$fields{version},     # dist, version
 
-                    $self->_oncpan($fields[5],$fields[6])   ? 1 : 2,
+                    $self->_oncpan($fields{dist},$fields{version}) ? 1 : 2,
 
-                    $fields[6] =~ /_/       ? 2 : 1,
-                    $devel                  ? 2 : 1,
-                    $patch                  ? 2 : 1,
+                    $fields{version} =~ /_/     ? 2 : 1,
+                    $devel                      ? 2 : 1,
+                    $patch                      ? 2 : 1,
 
-                    $fields[2] eq 'pass'    ? 1 : 0,
-                    $fields[2] eq 'fail'    ? 1 : 0,
-                    $fields[2] eq 'na'      ? 1 : 0,
-                    $fields[2] eq 'unknown' ? 1 : 0,
+                    $fields{state} eq 'pass'    ? 1 : 0,
+                    $fields{state} eq 'fail'    ? 1 : 0,
+                    $fields{state} eq 'na'      ? 1 : 0,
+                    $fields{state} eq 'unknown' ? 1 : 0,
 
-                    $fields[1]);            # guid
+                    $fields{guid});             # guid
             }
         } else {
         #print STDERR "# insert release $SQL{INSERT}{RELEASE},$fields[0],$fields[1]\n";
             $self->{CPANSTATS}->do_query($SQL{INSERT}{RELEASE},
-                $fields[0],$fields[1],  # id, guid
-                $fields[5],$fields[6],  # dist, version
+                $fields{id},$fields{guid},          # id, guid
+                $fields{dist},$fields{version},     # dist, version
 
-                $self->_oncpan($fields[5],$fields[6])   ? 1 : 2,
+                $self->_oncpan($fields{dist},$fields{version}) ? 1 : 2,
 
-                $fields[6] =~ /_/       ? 2 : 1,
-                $devel                  ? 2 : 1,
-                $patch                  ? 2 : 1,
+                $fields{version} =~ /_/     ? 2 : 1,
+                $devel                      ? 2 : 1,
+                $patch                      ? 2 : 1,
 
-                $fields[2] eq 'pass'    ? 1 : 0,
-                $fields[2] eq 'fail'    ? 1 : 0,
-                $fields[2] eq 'na'      ? 1 : 0,
-                $fields[2] eq 'unknown' ? 1 : 0);
+                $fields{state} eq 'pass'    ? 1 : 0,
+                $fields{state} eq 'fail'    ? 1 : 0,
+                $fields{state} eq 'na'      ? 1 : 0,
+                $fields{state} eq 'unknown' ? 1 : 0);
         }
     }
 
