@@ -352,11 +352,11 @@ my @delete_meta_mysql = (
 );
 
 my @test_stat_rows = (
-[ 1, 'a58945f6-3510-11df-89c9-1bb9c3681c0d' ],
-[ 2, 'ad3189d0-3510-11df-89c9-1bb9c3681c0d' ],
-[ 3, 'af820e12-3510-11df-89c9-1bb9c3681c0d' ],
-[ 4, 'b248f71e-3510-11df-89c9-1bb9c3681c0d' ],
-[ 5, 'b77e7132-3510-11df-89c9-1bb9c3681c0d' ]
+[ '1', '2', 'a58945f6-3510-11df-89c9-1bb9c3681c0d', 'pass', '201003', 'chris@bingosnet.co.uk', 'Sub-Exporter-ForMethods', '0.100050', 'i686-linux-thread-multi-64int', '5.8.8', 'Linux', '2.6.28-11-generic', '201003211739', undef ],
+[ '2', '2', 'ad3189d0-3510-11df-89c9-1bb9c3681c0d', 'pass', '201003', 'chris@bingosnet.co.uk', 'Algorithm-Diff', '1.1902', 'i686-linux-thread-multi-64int', '5.8.8', 'Linux', '2.6.28-11-generic', '201003211739', undef ],
+[ '3', '2', 'af820e12-3510-11df-89c9-1bb9c3681c0d', 'pass', '201003', 'chris@bingosnet.co.uk', 'Text-Diff', '1.37', 'i686-linux-thread-multi-64int', '5.8.8', 'Linux', '2.6.28-11-generic', '201003211739', undef ],
+[ '4', '2', 'b248f71e-3510-11df-89c9-1bb9c3681c0d', 'pass', '201003', 'chris@bingosnet.co.uk', 'Test-Differences', '0.500', 'i686-linux-thread-multi-64int', '5.8.8', 'Linux', '2.6.28-11-generic', '201003211739', undef ],
+[ '5', '2', 'b77e7132-3510-11df-89c9-1bb9c3681c0d', 'pass', '201003', 'chris@bingosnet.co.uk', 'namespace-autoclean', '0.09', 'i686-linux-thread-multi-64int', '5.8.8', 'Linux', '2.6.28-11-generic', '201003211739', undef ]
 );
 
 my @test_meta_rows = (
@@ -747,7 +747,7 @@ sub create_metabase {
 
     my $fh = IO::File->new("t/data/testers.csv") or return 1;
     while(<$fh>) {
-        chomp;
+        s/\s*$//;
         my @fields = split(',',$_);
         $options{'METABASE'}->{dbh}->do_query('INSERT INTO testers_email (id,resource,fullname,email) VALUES (?,?,?,?)',@fields);
     }
@@ -758,7 +758,7 @@ sub create_metabase {
 
 sub testCpanstatsRecords {
     $options{CPANSTATS} ||= config_db('CPANSTATS');
-    my @rows = $options{CPANSTATS}->{dbh}->get_query('array','SELECT id,guid FROM cpanstats');
+    my @rows = $options{CPANSTATS}->{dbh}->get_query('array','SELECT * FROM cpanstats');
     is_deeply(\@rows,\@test_stat_rows,'.. test cpanstats rows');
 }
 
