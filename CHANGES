@@ -26,6 +26,7 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
             bin/cpanstats			(v1.00)
 	- various data amendments, including _check_arch_os(), as the metabase
 	  uses the raw data.
+	- new perl_version table incorporated to speed up perl version lookups.
 
 0.41    18/03/2010
 	- fixes to change the 'id' (was NNTP ID) to an auto incremental field.

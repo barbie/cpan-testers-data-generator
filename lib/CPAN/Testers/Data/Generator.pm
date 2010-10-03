@@ -629,6 +629,12 @@ sub store_report {
         $self->{LITESTATS}->do_query($SQL{INSERT}{LITESTATS},$self->{report}{id},@fields);
     }
 
+    # update perl version table
+    my $patch  = $fields[8] =~ /^5.(7|9|[1-9][13579])/   ? 1 : 0,    # odd numbers now mark development releases
+    my $devel  = $fields[8] =~ /(RC\d+|patch)/           ? 1 : 0,
+    my ($perl) = $fields[8] =~ /(5\.\d+(?:\.\d+)?)/;
+    $self->{CPANSTATS}->do_query("INSERT IGNORE INTO perl_version (version,perl,patch,devel) VALUES (?,?,?,?)",$fields[8],$perl,$patch,$devel);
+
     # only valid reports
     if($self->{report}{type} == 2) {
         unshift @fields, $self->{report}{id};
@@ -649,16 +655,16 @@ sub store_report {
 
                     $self->_oncpan($fields[5],$fields[6])   ? 1 : 2,
 
-                    $fields[6] =~ /_/                       ? 2 : 1,
-                    $fields[8] =~ /^5.(7|9|[1-9][13579])/   ? 2 : 1,    # odd numbers now mark development releases
-                    $fields[8] =~ /(RC\d+|patch)/           ? 2 : 1,
+                    $fields[6] =~ /_/       ? 2 : 1,
+                    $devel                  ? 2 : 1,
+                    $patch                  ? 2 : 1,
 
                     $fields[2] eq 'pass'    ? 1 : 0,
                     $fields[2] eq 'fail'    ? 1 : 0,
                     $fields[2] eq 'na'      ? 1 : 0,
                     $fields[2] eq 'unknown' ? 1 : 0,
 
-                    $fields[1]);    # guid
+                    $fields[1]);            # guid
             }
         } else {
         #print STDERR "# insert release $SQL{INSERT}{RELEASE},$fields[0],$fields[1]\n";
@@ -668,9 +674,9 @@ sub store_report {
 
                 $self->_oncpan($fields[5],$fields[6])   ? 1 : 2,
 
-                $fields[6] =~ /_/                       ? 2 : 1,
-                $fields[8] =~ /^5.(7|9|[1-9][13579])/   ? 2 : 1,    # odd numbers now mark development releases
-                $fields[8] =~ /(RC\d+|patch)/           ? 2 : 1,
+                $fields[6] =~ /_/       ? 2 : 1,
+                $devel                  ? 2 : 1,
+                $patch                  ? 2 : 1,
 
                 $fields[2] eq 'pass'    ? 1 : 0,
                 $fields[2] eq 'fail'    ? 1 : 0,
