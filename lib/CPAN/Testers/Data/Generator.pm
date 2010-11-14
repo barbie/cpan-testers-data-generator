@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.00';
+$VERSION = '1.01';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -14,10 +14,12 @@ use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
 use File::Basename;
 use File::Path;
+use File::Slurp;
+use HTML::Entities;
 use IO::File;
 use JSON;
 use Time::Local;
-use HTML::Entities;
+use XML::RSS;
 
 use Metabase    0.004;
 use Metabase::Fact;
@@ -97,12 +99,14 @@ sub new {
     }
 
     # command line swtiches override configuration settings
-    for my $key (qw(logfile poll_limit stopfile offset)) {
+    for my $key (qw(logfile poll_limit stopfile offset json_file rss_file rss_limit reportlink)) {
         $self->{$key} = $hash{$key} || $cfg->val('MAIN',$key);
     }
 
     $self->{offset}     ||= 1;
     $self->{poll_limit} ||= 1000;
+    $self->{rss_limit}  ||= 1000;
+    $self->{reportlink} ||= '';
 
     my @rows = $self->{METABASE}->get_query('hash','SELECT * FROM testers_email');
     for my $row (@rows) {
@@ -140,12 +144,19 @@ sub DESTROY {
 sub generate {
     my $self    = shift;
     my $nonstop = shift || 0;
+    my @reports;
+
+    if($self->{json_file}) {
+        my $json = read_file($self->{json_file});
+        my $data = decode_json($json);
+        @reports = @{ $data };
+    }
 
 $self->_log("START GENERATE nonstop=$nonstop\n");
 
     do {
 
-    my ($processed,$stored,$cached) = (0,0,0);
+    my ($processed,$stored,$cached,$count) = (0,0,0,0);
     my $start = localtime(time);
 
     my $guids = $self->get_next_guids();
@@ -163,8 +174,12 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
                 $self->{report}{guid}   = $guid;
                 next    if($self->parse_report(report => $report)); # true if invalid report
 
-                if($self->store_report()) { $self->_log(".. stored"); $stored++; }
-                else                      {
+                if($self->store_report()) { 
+                    $self->_log(".. stored"); $stored++; 
+                    unshift @reports, $report;
+                    $count++;
+
+                } else {
                     if($self->{time} gt $self->{report}{updated}) {
                         $self->_log(".. FAIL: older than requested [$self->{time}]\n");
                         next;
@@ -176,8 +191,18 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
             } else {
                 $self->_log(".. FAIL\n");
             }
+
+            if($count % 100 == 0) {
+                splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
+                overwrite_file( $self->{rss_file}, $self->make_rss( \@reports ) )      if($self->{rss_file});
+            }
         }
     }
+
+    # store files
+    splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
+    overwrite_file( $self->{json_file}, $self->make_json( \@reports ) )    if($self->{json_file});
+    overwrite_file( $self->{rss_file}, $self->make_rss( \@reports ) )      if($self->{rss_file});
 
     $self->commit();
     my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
@@ -885,6 +910,57 @@ sub _send_email {
             $self->_log(".. MAIL SEND - FAILED - $admin\n");
         }
     }
+}
+
+sub _make_json {
+    my ( $self, $data ) = @_;
+    return encode_json( $data );
+}
+
+sub _make_rss {
+    my ( $self, $data ) = @_;
+
+    my $title = "Recent CPAN Testers Reports";
+    my $link  = "http://www.cpantesters.org/static/recent.html";
+    my $desc  = "Recent CPAN Testers reports";
+
+    my @date = $data->[0]->{fulldate} =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/;
+    my $date = sprintf "%04d-%02d-%02dT%02d:%02d+01:00", @date;
+
+    my $rss = XML::RSS->new( version => '1.0' );
+    $rss->channel(
+        title       => $title,
+        link        => $link,
+        description => $desc,
+        syn         => {
+            updatePeriod    => "daily",
+            updateFrequency => "1",
+            updateBase      => "1901-01-01T00:00+00:00",
+        },
+        dc          => {
+            date            => $date,
+            subject         => $desc,
+            creator         => 'barbie@cpantesters.org',
+            publisher       => 'barbie@cpantesters.org',
+            rights          => 'Copyright ' . $date[0] . ', CPAN Testers',
+            language        => 'en-gb'
+        }
+    );
+
+    for my $test (@$data) {
+        $rss->add_item(
+            title => sprintf(
+                "%s %s-%s %s on %s %s (%s)",
+                map {$_||''}
+                @{$test}{
+                    qw( status dist version perl osname osvers platform )
+                    }
+            ),
+            link => "$self->{reportlink}/" . ($test->{guid} || $test->{id}),
+        );
+    }
+
+    return $rss->as_string;
 }
 
 sub _log {

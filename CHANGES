@@ -1,5 +1,8 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+1.01    current
+	- generator now builds a JSON and RSS file of the last n reports.
+
 1.00    14/11/2010
 	- redesigned to use Metabase. All NNTP references removed.
 	- removed ignore and nostore options.
