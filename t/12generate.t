@@ -22,11 +22,14 @@ my $TESTS = 71;
 # Test Conditions
 
 BEGIN {
-    my $meta = CPAN::Testers::Metabase::AWS->new(
-        bucket      => 'cpantesters',
-        namespace   => 'beta2',
-    );
-        diag('No AWS key')   unless($meta);
+    my $meta;
+    eval {
+        $meta = CPAN::Testers::Metabase::AWS->new(
+            bucket      => 'cpantesters',
+            namespace   => 'beta2',
+        );
+    };
+    diag('No AWS key')   unless($meta);
 
     if($meta) {
         # check whether tester has a valid access key
@@ -461,7 +464,9 @@ is(create_metabase(0), 0, '.. metabase created');
 
 ## Test we can rebuild
 
-{
+SKIP: {
+    skip "Valid S3 access key required for live tests", 7 unless $meta;
+
     my $t = CPAN::Testers::Data::Generator->new(
         config  => $config,
         logfile => $directory . '/cpanstats.log'
@@ -494,7 +499,9 @@ is(create_metabase(0), 0, '.. metabase created');
 
 # TEST INTERNALS
 
-{
+SKIP: {
+    skip "Valid S3 access key required for live tests", 22 unless $meta;
+
     testCpanstatsRecords();
     testMetabaseRecords();
 
@@ -530,13 +537,13 @@ is(create_metabase(0), 0, '.. metabase created');
     my @rows = $options{CPANSTATS}->{dbh}->get_query('array','SELECT count(id) FROM osname');
     is($rows[0]->[0],25,'.. all OS names');
 
-    is($t->_platform_to_osname('linux'),'linux','.. known OS');
-    is($t->_platform_to_osname('linuxThis'),'linux','.. known mispelling');
-    is($t->_platform_to_osname('unknown'),'','.. unknown OS');
+    is($t->_platform_to_osname('linux'),'linux',        '.. known OS');
+    is($t->_platform_to_osname('linuxThis'),'linux',    '.. known mispelling');
+    is($t->_platform_to_osname('unknown'),'',           '.. unknown OS');
 
-    is($t->_osname('LINUX'),'Linux','.. known OS fixed case');
-    is($t->_osname('Unknown'),'UNKNOWN','.. save unknown OS');
-    is($t->_platform_to_osname('unknown'),'unknown','.. unknown is now known OS');
+    is($t->_osname('LINUX'),'Linux',                    '.. known OS fixed case');
+    is($t->_osname('Unknown'),'UNKNOWN',                '.. save unknown OS');
+    is($t->_platform_to_osname('unknown'),'unknown',    '.. unknown is now known OS');
 
     my $json;
     my $fh = IO::File->new("t/data/ad3189d0-3510-11df-89c9-1bb9c3681c0d.json") or die diag("$!");
@@ -552,7 +559,9 @@ is(create_metabase(0), 0, '.. metabase created');
 
 ## Test we can reparse
 
-{
+SKIP: {
+    skip "Valid S3 access key required for live tests", 5 unless $meta;
+
     my $t = CPAN::Testers::Data::Generator->new(
         config  => $config,
         logfile => $directory . '/cpanstats.log'
@@ -575,7 +584,9 @@ is(create_metabase(0), 0, '.. metabase created');
 
 ## Test we don't reparse anything that doesn't already exist
 
-{
+SKIP: {
+    skip "Valid S3 access key required for live tests", 7 unless $meta;
+
     # everything should still be there
     ok(-f $directory . '/cpanstats.db','.. dbs still there [STAGE 5]');
     ok(-f $directory . '/cpanstats.log');
@@ -605,7 +616,9 @@ is(create_metabase(0), 0, '.. metabase created');
 
 ## Test we can regenerate anything that doesn't already exist
 
-{
+SKIP: {
+    skip "Valid S3 access key required for live tests", 6 unless $meta;
+
     # everything should still be there
     ok(-f $directory . '/cpanstats.db','.. dbs still there [STAGE 6]');
     ok(-f $directory . '/cpanstats.log');
