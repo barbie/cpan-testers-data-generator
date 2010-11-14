@@ -26,10 +26,12 @@ BEGIN {
         bucket      => 'cpantesters',
         namespace   => 'beta2',
     );
+        diag('No AWS key')   unless($meta);
 
     if($meta) {
         # check whether tester has a valid access key
         $meta = undef   unless($meta->access_key_id());
+        diag('No S3 key')   unless($meta);
     }
 }
 

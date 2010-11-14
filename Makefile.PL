@@ -14,7 +14,7 @@ WriteMakefile(
         'IO::File'                          => 0,
         'JSON'                              => 0,
         'Time::Local'                       => 0,
-        'Metabase'                          => 0.004,
+        'Metabase'                          => 0.014,
         'Metabase::Fact'                    => 0,
         'CPAN::Testers::Fact::LegacyReport' => 0,
         'CPAN::Testers::Fact::TestSummary'  => 0,
