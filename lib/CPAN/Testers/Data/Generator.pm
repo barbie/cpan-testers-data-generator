@@ -51,6 +51,11 @@ Thanks,
 CPAN Testers Server.
 ';
 
+my @admins = (
+    'barbie@missbarbell.co.uk',
+    #'david@dagolden.com'
+);
+
 my $OSNAMES;
 my %OSNAMES = (
     'MacPPC'    => 'macos',
@@ -63,7 +68,14 @@ my %OSNAMES = (
     'linThis'   => 'linux',
     'linuThis'  => 'linux',
     'lThis'     => 'linux',
+    'xen-amd64' => 'linux',
     'openThis'  => 'openbsd',
+);
+
+my %mappings = (
+    'WWW-Tumblr'                        => ['WWW-Tumblr','0'],
+    'Text-Phonetic-MatchRatingCodex-1'  => ['Text-Phonetic-MatchRatingCodex','1-0'],
+    'BitArray1'                         => ['BitArray','1-0'],
 );
 
 #----------------------------------------------------------------------------
@@ -146,74 +158,26 @@ sub generate {
     my $nonstop = shift || 0;
     my @reports;
 
+    $self->{reparse} = 0;
+
     if($self->{json_file}) {
         my $json = read_file($self->{json_file});
-        my $data = decode_json($json);
-        @reports = @{ $data };
+        $self->{reports} = decode_json($json);
     }
 
 $self->_log("START GENERATE nonstop=$nonstop\n");
 
     do {
+        my $start = localtime(time);
+        ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
+        my $limit = int($self->{rss_limit} / 5);
+        $limit = 500;
 
-    my ($processed,$stored,$cached,$count) = (0,0,0,0);
-    my $start = localtime(time);
+        my $guids = $self->get_next_guids();
+        $self->retrieve_reports($guids,$start,$limit);
 
-    my $guids = $self->get_next_guids();
-    if($guids) {
-        for my $guid (@$guids) {
-            $self->_log("GUID [$guid]");
-            $processed++;
-
-            #if($self->already_saved($guid)) {
-            #    $self->_log(".. already saved\n");
-            #    next;
-            #}
-
-            if(my $report = $self->get_fact($guid)) {
-                $self->{report}{guid}   = $guid;
-                next    if($self->parse_report(report => $report)); # true if invalid report
-
-                if($self->store_report()) { 
-                    $self->_log(".. stored"); $stored++; 
-                    unshift @reports, $report;
-                    $count++;
-
-                } else {
-                    if($self->{time} gt $self->{report}{updated}) {
-                        $self->_log(".. FAIL: older than requested [$self->{time}]\n");
-                        next;
-                    }
-                    $self->_log(".. already stored");
-                }
-                if($self->cache_report()) { $self->_log(".. cached\n"); $cached++; }
-                else                      { $self->_log(".. bad cache data\n"); }
-            } else {
-                $self->_log(".. FAIL\n");
-            }
-
-            if($count % 100 == 0) {
-                splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
-                overwrite_file( $self->{rss_file}, $self->make_rss( \@reports ) )      if($self->{rss_file});
-            }
-        }
-    }
-
-    # store files
-    splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
-    overwrite_file( $self->{json_file}, $self->make_json( \@reports ) )    if($self->{json_file});
-    overwrite_file( $self->{rss_file}, $self->make_rss( \@reports ) )      if($self->{rss_file});
-
-    $self->commit();
-    my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
-    my $stop = localtime(time);
-    $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
-
-    # only email invalid reports during the generate process
-    $self->_send_email()    if($self->{invalid});
-
-    $nonstop = 0	if($processed == 0);
-    $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
+        $nonstop = 0	if($self->{processed} == 0);
+        $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
 
 $self->_log("CHECK nonstop=$nonstop\n");
     } while($nonstop);
@@ -222,83 +186,119 @@ $self->_log("STOP GENERATE nonstop=$nonstop\n");
 
 sub regenerate {
     my ($self,$hash) = @_;
-    $self->{reparse} = 1;
+
+    $self->{reparse} = 0;
+
+    my @date = localtime(time);
+    my $maxdate = sprintf '%04d-%02d-%02dT00:00:00Z', $date[5]+1900, $date[4]+1,$date[3];
 
 $self->_log("START REGENERATE\n");
 
-    $hash->{dstart} = $self->_get_createdate( $hash->{gstart}, $hash->{dstart} );
-    $hash->{dend}   = $self->_get_createdate( $hash->{gend},   $hash->{dend} );
+    my @data;
+    if($hash->{file}) {
+        my $fh = IO::File->new($hash->{file},'r') or die "Cannot open file [$hash->{file}]: $!\n";
+        while(<$fh>) {
+            s/\s+$//;
+            my ($fval,$tval) = split(/,/,$_,2);
+            my %data;
+            $data{gstart} = $fval   if($fval =~ /^\w+-\w+-\w+-\w+$/);
+            $data{dstart} = $fval   if($fval =~ /^\d+-\d+-\d+T\d+:\d+:\d+Z$/);
+            $data{gend}   = $tval   if($tval =~ /^\w+-\w+-\w+-\w+$/);
+            $data{dend}   = $tval   if($tval =~ /^\d+-\d+-\d+T\d+:\d+:\d+Z$/);
+            push @data, \%data;
+        }
+        $fh->close;
+    } else {
+        push @data, {   gstart => $hash->{gstart}, gend => $hash->{gend},
+                        dstart => $hash->{dstart}, dend => $hash->{dend} };
+    }
 
-    return  unless($hash->{dstart} && $hash->{dend});
+    for my $data (@data) {
+        my $start = $self->_get_createdate( $data->{gstart}, $data->{dstart} );
+        my $end   = $self->_get_createdate( $data->{gend},   $data->{dend} );
 
-$self->_log("dstart=$hash->{dstart}, dend=$hash->{dend}\n");
+        unless($start && $end) {
+$self->_log("BAD DATES: start=$start, end=$end [missing dates]\n");
+            next;
+        }
+        if($start ge $end) {
+$self->_log("BAD DATES: start=$start, end=$end [end before start]\n");
+            next;
+        }
+        if($end gt $maxdate) {
+$self->_log("BAD DATES: start=$start, end=$end [exceeds $maxdate]\n");
+            next;
+        }
 
-    my @where;
-    push @where, "updated >= '$hash->{dstart}'"  if($hash->{dstart});
-    push @where, "updated <= '$hash->{dend}'"    if($hash->{dend});
-    
-    my $sql =   'SELECT guid FROM metabase' . 
-                (@where ? ' WHERE ' . join(' AND ',@where) : '') .
-                ' ORDER BY updated asc';
+$self->_log("start=$start, end=$end\n");
 
-    my @guids = $self->{METABASE}->get_query('hash',$sql);
-    my %guids = map {$_->{guid} => 1} @guids;
+        ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
-    my ($processed,$stored,$cached) = (0,0,0);
-    my $start = $hash->{dstart};
+        # what guids do we already have?
+        my @where;
+        push @where, "updated >= '$data->{dstart}'";
+        push @where, "updated <= '$data->{dend}'";
+        
+        my $sql =   'SELECT guid FROM metabase' . 
+                    (@where ? ' WHERE ' . join(' AND ',@where) : '') .
+                    ' ORDER BY updated asc';
 
-    my $last = $start;
-    while($start le $hash->{dend}) {
-        my $guids = $self->get_next_guids($start);
-        if($guids) {
-            for my $guid (@$guids) {
-                $self->_log("GUID [$guid]");
-                $processed++;
+        my @guids = $self->{METABASE}->get_query('hash',$sql);
+        my %guids = map {$_->{guid} => 1} @guids;
 
-                if($guids{$guid}) {
-                    $self->_log(".. already saved\n");
-                    next;
-                }
+        while($start le $end) {
+            # get list of guids from given start date
+            my $guids = $self->get_next_guids($start);
 
-                if(my $report = $self->get_fact($guid)) {
-                    $start = $report->{metadata}{core}{update_time};
-                    $self->{report}{guid}   = $guid;
-                    next    if($self->parse_report(report => $report)); # true if invalid report
+            if($guids) {
+                for my $guid (@$guids) {
+                    $self->_log("GUID [$guid]");
 
-                    if($self->store_report()) { $self->_log(".. stored"); $stored++;    }
-                    else                      { $self->_log(".. already stored");       }
-                    if($self->cache_report()) { $self->_log(".. cached\n"); $cached++;  }
-                    else                      { $self->_log(".. bad cache data\n");     }
-                } else {
-                    $self->_log(".. FAIL\n");
+                    $self->{processed}++;
+
+                    if($guids{$guid}) {
+                        $self->_log(".. already saved\n");
+                        next;
+                    }
+
+                    if(my $report = $self->get_fact($guid)) {
+                        $start = $report->{metadata}{core}{update_time};
+                        $self->{report}{guid}   = $guid;
+                        next    if($self->parse_report(report => $report)); # true if invalid report
+
+                        if($self->store_report()) { $self->_log(".. stored"); $self->{stored}++;    }
+                        else                      { $self->_log(".. already stored");       }
+                        if($self->cache_report()) { $self->_log(".. cached\n"); $self->{cached}++;  }
+                        else                      { $self->_log(".. bad cache data\n");     }
+                    } else {
+                        $self->_log(".. FAIL\n");
+                    }
+
+                    last    if($start gt $end);
                 }
             }
+
+            $self->commit();
         }
 
         $self->commit();
-
-        last    if($start eq $last);
-        $last = $start;
+        my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
+        my $stop = localtime(time);
+        $self->_log("MARKER: processed=$self->{processed}, stored=$self->{stored}, cached=$self->{cached}, invalid=$invalid, start=$start, stop=$stop\n");
     }
-
-    $self->commit();
-    my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
-    my $stop = localtime(time);
-    $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
 
     # only email invalid reports during the generate process
     $self->_send_email()    if($self->{invalid});
 
-$self->_log("STOP REGENERATE last=$last\n");
-
-    return $last;
+$self->_log("STOP REGENERATE\n");
 }
 
 sub rebuild {
     my ($self,$hash) = @_;
-    $self->{reparse} = 1;
-    my ($processed,$stored,$cached) = (0,0,0);
+
     my $start = localtime(time);
+    ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
+    $self->{reparse} = 1;
 
 $self->_log("START REBUILD\n");
 
@@ -315,7 +315,9 @@ $self->_log("START REBUILD\n");
     
     my $sql =   'SELECT * FROM metabase' . 
                 (@where ? ' WHERE ' . join(' AND ',@where) : '') .
-                ' ORDER BY updated asc';
+                ' ORDER BY updated ASC';
+
+$self->_log("START sql=[$sql]\n");
 
 #    $self->{CPANSTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
 #    $self->{LITESTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
@@ -323,7 +325,7 @@ $self->_log("START REBUILD\n");
     my $iterator = $self->{METABASE}->iterator('hash',$sql);
     while(my $row = $iterator->()) {
         $self->_log("GUID [$row->{guid}]");
-        $processed++;
+        $self->{processed}++;
 
         # no article for that id!
         unless($row->{report}) {
@@ -348,49 +350,53 @@ $self->_log("START REBUILD\n");
         if($self->cache_update())   { $self->_log(".. metabase stored\n") }
         else                        { $self->_log(".. bad metabase cache data\n") }
 
-        $stored++;
-        $cached++;
+        $self->{stored}++;
+        $self->{cached}++;
     }
 
     my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
     my $stop = localtime(time);
-    $self->_log("MARKER: processed=$processed, stored=$stored, cached=$cached, invalid=$invalid, start=$start, stop=$stop\n");
+    $self->_log("MARKER: processed=$self->{processed}, stored=$self->{stored}, cached=$self->{cached}, invalid=$invalid, start=$start, stop=$stop\n");
 
     $self->commit();
 $self->_log("STOP REBUILD\n");
 }
 
 sub reparse {
-    my ($self,$guid) = @_;
-$self->_log("START REPARSE [$guid]\n");
-    return  unless($guid);
+    my ($self,$hash,@guids) = @_;
+$self->_log("START REPARSE\n");
+    return  unless(@guids);
 
     $self->{reparse} = 1;
 
-    if(my $report = $self->get_fact($guid)) {
-        $self->{report}{guid} = $guid;
-        if($self->parse_report(report => $report)) { # true if invalid report
-            $self->_log(".. cannot parse report [$guid]\n");
-            return 0;
-        }
+    for my $guid (@guids) {
+        if(my $report = $self->get_fact($guid)) {
+            $self->{report}{guid} = $guid;
+            $hash->{report} = $report;
+            if($self->parse_report(%$hash)) {	# true if invalid report
+		        $self->_log(".. cannot parse report [$guid]\n");
+		        return 0;
+		    }
 
-        if($self->store_report()) { $self->_log(".. stored"); }
-        else                      {
-            if($self->{time} gt $self->{report}{updated}) {
-                $self->_log(".. FAIL: older than requested [$self->{time}]\n");
-                return 0;
-            }
-            $self->_log(".. already stored");
-        }
-        if($self->cache_report()) { $self->_log(".. cached\n"); }
-        else                      { $self->_log(".. FAIL: bad cache data\n"); }
-    } else {
-        $self->_log(".. FAIL\n");
-        return 0;
-    }
+		    if($self->store_report()) { $self->_log(".. stored"); }
+		    else                      {
+		        if($self->{time} gt $self->{report}{updated}) {
+		            $self->_log(".. FAIL: older than requested [$self->{time}]\n");
+		            return 0;
+                }
+            
+            	$self->_log(".. already stored");
+        	}
+        	if($self->cache_report()) { $self->_log(".. cached\n"); }
+        	else                      { $self->_log(".. FAIL: bad cache data\n"); }
+    	} else {
+        	$self->_log(".. FAIL\n");
+        	return 0;
+    	}
+	}
 
     $self->commit();
-$self->_log("STOP REPARSE [$guid]\n");
+$self->_log("STOP REPARSE\n");
     return 1;
 }
 
@@ -406,14 +412,13 @@ sub commit {
 }
 
 sub get_next_guids {
-    my ($self,$dstart) = @_;
-    my $guids;
-    my $time;
+    my ($self,$start) = @_;
+    my ($guids,$time);
 
-    if($dstart) {
-        $self->{time} = $dstart;
+    if($start) {
+        $self->{time} = $start;
     } else {
-        my @rows = $self->{METABASE}->get_query('array','SELECT max(updated) FROM metabase');
+        my @rows = $self->{METABASE}->get_query('array','SELECT MAX(updated) FROM metabase');
         $self->{time} = $rows[0]->[0]	if(@rows);
 
         $self->{time} ||= '1999-01-01T00:00:00Z';
@@ -444,6 +449,63 @@ sub get_next_guids {
     return $guids;
 }
 
+sub retrieve_reports {
+    my ($self,$guids,$start,$limit) = @_;
+    $limit ||= 0;
+    my $count = 0;
+
+    my @reports = $self->{reports} ? @{ $self->{reports} } : ();
+
+    if($guids) {
+        for my $guid (@$guids) {
+            $self->_log("GUID [$guid]");
+            $self->{processed}++;
+
+            if(my $report = $self->get_fact($guid)) {
+                $self->{report}{guid}   = $guid;
+                next    if($self->parse_report(report => $report)); # true if invalid report
+
+                if($self->store_report()) { 
+                    $self->_log(".. stored"); $self->{stored}++; 
+                    unshift @reports, $report;
+                    $count++;
+
+                } else {
+                    if($self->{time} gt $self->{report}{updated}) {
+                        $self->_log(".. FAIL: older than requested [$self->{time}]\n");
+                        next;
+                    }
+                    $self->_log(".. already stored");
+                }
+                if($self->cache_report()) { $self->_log(".. cached\n"); $self->{cached}++; }
+                else                      { $self->_log(".. bad cache data\n"); }
+            } else {
+                $self->_log(".. FAIL\n");
+            }
+
+            if($limit && $count % $limit == 0) {
+                splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
+                overwrite_file( $self->{rss_file}, $self->make_rss( \@reports ) )      if($self->{rss_file});
+            }
+        }
+    }
+
+    # store recent files
+    if($limit){
+        splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
+        overwrite_file( $self->{json_file}, $self->make_json( \@reports ) )    if($self->{json_file});
+        overwrite_file( $self->{rss_file}, $self->make_rss( \@reports ) )      if($self->{rss_file});
+    }
+
+    $self->commit();
+    my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
+    my $stop = localtime(time);
+    $self->_log("MARKER: processed=$self->{processed}, stored=$self->{stored}, cached=$self->{cached}, invalid=$invalid, start=$start, stop=$stop\n");
+
+    # only email invalid reports during the generate process
+    $self->_send_email()    if($self->{invalid});
+}
+
 sub already_saved {
     my ($self,$guid) = @_;
     my @rows = $self->{METABASE}->get_query('array','SELECT id FROM metabase WHERE guid=?',$guid);
@@ -458,7 +520,7 @@ sub get_fact {
     eval { $fact = $self->{librarian}->extract( $guid ) };
     return $fact    if($fact);
 
-    $self->_log(" ... no report [$@]\n");
+    $self->_log(" ... no report [guid=$guid] [$@]\n");
     return;
 }
 
@@ -488,6 +550,14 @@ sub parse_report {
             my $dist                    = Metabase::Resource->new( $fact->resource );
             $self->{report}{dist}       = $dist->metadata->{dist_name};
             $self->{report}{version}    = $dist->metadata->{dist_version};
+
+            # some distros are a pain!
+	    	if($self->{report}{version} eq '' && $mappings{$self->{report}{dist}}) {
+                $self->{report}{version}    = $mappings{$self->{report}{dist}}->[1];
+                $self->{report}{dist}       = $mappings{$self->{report}{dist}}->[0];
+            } elsif($self->{report}{version} eq '') {
+                $self->{report}{version}    = 0;
+            }
 
             $self->{report}{from}       = $self->_get_tester( $fact->creator->resource );
 
@@ -672,8 +742,8 @@ sub store_report {
         # push page requests
         # - note we only update the author if this is the *latest* version of the distribution
         my $author = $self->{report}{pauseid} || $self->_get_author($fields{dist},$fields{version});
-        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('author',?,1)",$author)  if($author);
-        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight) VALUES ('distro',?,2)",$fields{dist});
+        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight,id) VALUES ('author',?,1,?)",$author,$fields[0])  if($author);
+        $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight,id) VALUES ('distro',?,1,?)",$fields[5],$fields[0]);
 
         my @rows = $self->{CPANSTATS}->get_query('array',$SQL{SELECT}{RELEASE},$fields{guid});
         #print STDERR "# select release $SQL{SELECT}{RELEASE},$fields{guid}\n";
@@ -812,7 +882,7 @@ sub _valid_field {
 sub _get_lastid {
     my $self = shift;
 
-    my @rows = $self->{METABASE}->get_query('array',"SELECT max(id) FROM metabase");
+    my @rows = $self->{METABASE}->get_query('array',"SELECT MAX(id) FROM metabase");
     return 0    unless(@rows);
     return $rows[0]->[0] || 0;
 }
@@ -829,7 +899,9 @@ sub _oncpan {
 }
 
 sub _osname {
-    my ($self,$name) = @_;
+    my $self = shift;
+    my $name = shift || return '';
+
     my $lname = lc $name;
     my $uname = uc $name;
     $self->{OSNAMES}{$lname} ||= do {
@@ -1139,7 +1211,7 @@ Note that as only 2500 can be returned at any one time due to Amazon SimpleDB
 restrictions, this method will only process the guids returned from a given
 start data, up to a maxiumu of 2500 guids.
 
-This methog will return the guid of the last report processed.
+This method will return the guid of the last report processed.
 
 =item * rebuild
 
@@ -1175,6 +1247,11 @@ are completed.
 
 Get the list of GUIDs for the reports that have been submitted since the last
 cached report.
+
+=item * retrieve_reports
+
+Abstracted loop of requesting GUIDs, then parsing, storing and caching each 
+report as appropriate. Updates Recent JSON & RSS files.
 
 =item * already_saved
 
@@ -1283,7 +1360,7 @@ changes, a new name was given to the distribution.
 
 =head2 CPAN-Testers-Data-Generator
 
-  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2010
+  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2011
 
 =head1 LICENSE
 

@@ -20,7 +20,6 @@
         "testing"
     ],
 
-
     "prereqs" : {
         "runtime" : {
             "requires" : {
@@ -38,13 +37,13 @@
                 "File::Path": "0",
                 "File::Slurp": "0",
                 "Getopt::ArgvFile": "0",
-                "Getopt::Long": "0"
+                "Getopt::Long": "0",
                 "IO::File": "0",
                 "JSON": "0",
                 "Metabase": "0.014",
                 "Metabase::Fact": "0",
                 "Time::Local": "0",
-                "XML::Feed": "0",
+                "XML::Feed": "0"
             }
         },
         "test" : {
@@ -55,8 +54,8 @@
             "recommends": {
                 "Test::Pod": "1.00",
                 "Test::Pod::Coverage": "0.08",
-                "Test::CPAN::Meta": "0.13",
-                "Test::JSON::Meta": "0.08"
+                "Test::CPAN::Meta": "0.18",
+                "Test::CPAN::Meta::JSON": "0.10"
             }
         }
     },

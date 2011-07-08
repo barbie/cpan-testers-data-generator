@@ -2,6 +2,11 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
 
 1.01    current
 	- generator now builds a JSON and RSS file of the last n reports.
+	- added id to page_request insert (to speed up page builder).
+	- reworked regenerator to allow a file of guid/date ranges.
+	- update regenerate option and documentation:
+            bin/cpanstats			(v1.01)
+	- added mappings for old badly formatted distributions.
 
 1.00    14/11/2010
 	- redesigned to use Metabase. All NNTP references removed.

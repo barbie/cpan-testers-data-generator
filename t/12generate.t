@@ -1,6 +1,15 @@
 #!/usr/bin/perl -w
 use strict;
 
+#----------------------------------------------------------------------------
+# TODO List
+
+# 1. add regenrate tests
+# 2. mock AWS connection and return pre-prepared report data
+
+#----------------------------------------------------------------------------
+# Libraries
+
 use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
 use CPAN::Testers::Data::Generator;
@@ -117,7 +126,8 @@ my @create_sqlite = (
             'CREATE TABLE page_requests (
                 type        TEXT,
                 name        TEXT,
-                weight      INTEGER
+                weight      INTEGER,
+                id          INTEGER
             )',
 
             'CREATE TABLE osname (
@@ -189,7 +199,8 @@ my @create_mysql = (
             'CREATE TABLE page_requests (
                 type        varchar(8)   NOT NULL,
                 name        varchar(255) NOT NULL,
-                weight      int(2) unsigned NOT NULL
+                weight      int(2)  unsigned NOT NULL,
+                id          int(10) unsigned default 0
             )',
 
             'DROP TABLE IF EXISTS release_data',
@@ -439,8 +450,6 @@ SKIP: {
     is(countReleases(),1,'.. release data entries added');
 }
 
-# FROM HERE WE DON'T NEED THE INTERNET
-
 # refresh the databases
 
 rmtree($directory);
@@ -496,6 +505,8 @@ SKIP: {
     is(-s $directory . '/cpanstats.db', $size,'.. db should be same size');
     ok(-f $directory . '/cpanstats.log');
 }
+
+# FROM HERE WE DON'T NEED THE INTERNET
 
 # TEST INTERNALS
 

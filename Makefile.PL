@@ -11,7 +11,7 @@ WriteMakefile(
         'CPAN::Testers::Common::DBUtils'    => 0.03,
         'File::Basename'                    => 0,
         'File::Path'                        => 0,
-        'File::Slurp'                        => 0,
+        'File::Slurp'                       => 0,
         'IO::File'                          => 0,
         'JSON'                              => 0,
         'Time::Local'                       => 0,

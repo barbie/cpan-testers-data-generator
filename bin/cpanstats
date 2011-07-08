@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 
-my $VERSION = '1.00';
+my $VERSION = '1.01';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -11,7 +11,7 @@ use lib qw(../lib lib);
 use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 
-use CPAN::Testers::Data::Generator   '1.00';
+use CPAN::Testers::Data::Generator   '1.01';
 
 #----------------------------------------------------------------------------
 # Variables
@@ -28,10 +28,10 @@ my $t = CPAN::Testers::Data::Generator->new(
     logfile     => $options{log},
 );
 
-if($options{regenerate})	{ $t->regenerate( map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
-elsif($options{rebuild})	{ $t->rebuild(	  map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
-elsif($options{reparse})	{ $t->reparse(  $options{reparse} ); }
-else				{ $t->generate( $options{nonstop} ); }
+if($options{regenerate})    { $t->regenerate( map { $_ => $options{$_} } qw(gstart gend dstart dend file) ); }
+elsif($options{rebuild})    { $t->rebuild(    map { $_ => $options{$_} } qw(gstart gend dstart dend) ); }
+elsif($options{reparse})    { $t->reparse(  $options{reparse} ); }
+else                        { $t->generate( $options{nonstop} ); }
 
 # -------------------------------------
 # Subroutines
@@ -39,55 +39,58 @@ else				{ $t->generate( $options{nonstop} ); }
 sub init_options {
     GetOptions( \%options,
         'config|c=s',
-	'log|l=s',
+        'log|l=s',
         'nonstop|n',
 
-        'regenerate',
         'rebuild',
         'gstart=s',
         'gend=s',
         'dstart=s',
         'dend=s',
 
-	'reparse=s',
+        'regenerate',
+        'file=s',
+
+        'reparse=s',
 
         'help|h',
         'version|v'
-    );
+    ) or help(1);
 
-    _help(1) if($options{help});
-    _help(0) if($options{version});
+    help(1) if($options{help});
+    help(0) if($options{version});
 }
 
-sub _help {
+sub help {
     my $full = shift;
 
     if($full) {
         print <<HERE;
 
 Usage: $0 \
-         [-c=<file>] [-log=<file>] \
-	 [--rebuild ( --gstart=s [--gend=s]] | --dstart=s [--dend=s]] ) \
-	 [--regenerate ( --gstart=s [--gend=s]] | --dstart=s [--dend=s]] ) \
-	 [--reparse=s]
-         [-n] [-h] [-v]
+    [-c=<file>] [-log=<file>] \
+    [--rebuild ( --gstart=s [--gend=s] | --dstart=s [--dend=s] )] \
+    [--regenerate ( --gstart=s --gend=s | --dstart=s --dend=s | --file=s )] \
+    [--reparse=s]
+    [-n] [-h] [-v]
 
-  -c=<file>      configuration file
-  -l=<file>      output log file
-  -n             nonstop, repeat until no more articles
+  -c=<file>     configuration file
+  -l=<file>     output log file
+  -n            nonstop, repeat until no more articles
 
-  --rebuild      rebuild cpanstats from local metabase
-  --gstart       start rebuild from guid
-  --gend         end rebuild at guid
-  --dstart       start rebuild from date (YYYY-MM-DDThh-mm-ssZ)
-  --dend         end rebuild at date (YYYY-MM-DDThh-mm-ssZ)
+  --rebuild     rebuild cpanstats from local metabase
+  --gstart      start rebuild from guid
+  --gend        end rebuild at guid
+  --dstart      start rebuild from date (YYYY-MM-DDThh-mm-ssZ)
+  --dend        end rebuild at date (YYYY-MM-DDThh-mm-ssZ)
 
-  --regenerate   regenerate between two dates/guids.
+  --regenerate  regenerate between two dates/guids.
+  --file=<file> file of guid/date ranges, one per line
 
-  --reparse      reparse a specific guid from the metabase
+  --reparse     reparse a specific guid from the metabase
 
-  -h             this help screen
-  -v             program version
+  -h            this help screen
+  -v            program version
 
 HERE
 
@@ -113,7 +116,7 @@ cpanstats - script to access the Metabase server and update the database.
   cpanstats -c=data/settings.ini --nonstop
 
   # rebuild default database from local cache
-  cpanstats -c=data/settings.ini --rebuild	# rebuild entire local dataset
+  cpanstats -c=data/settings.ini --rebuild  # rebuild entire local dataset
   cpanstats -c=data/settings.ini --rebuild --gstart=$guid1
   cpanstats -c=data/settings.ini --rebuild --gstart=$guid1 --gend=$guid2
   cpanstats -c=data/settings.ini --rebuild --dstart=$date1
@@ -122,6 +125,7 @@ cpanstats - script to access the Metabase server and update the database.
   # regenerate reports between to given points
   cpanstats -c=data/settings.ini --regenerate --gstart=$guid1 --gend=$guid2
   cpanstats -c=data/settings.ini --regenerate --dstart=$date1 --dend=$date2
+  cpanstats -c=data/settings.ini --regenerate --file=$file
   
   # reparse a single report from remote metabase
   cpanstats -c=data/settings.ini --reparse=$guid1
@@ -160,10 +164,9 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2010 Barbie for Miss Barbell Productions.
+  Copyright (C) 2005-2011 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.
 
 =cut
-
