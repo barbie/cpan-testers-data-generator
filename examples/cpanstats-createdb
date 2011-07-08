@@ -3,7 +3,7 @@ use strict;
 
 use vars qw($VERSION);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 $|++;
 
@@ -169,7 +169,8 @@ sub process {
             'CREATE TABLE page_requests (
               type        varchar(8)       NOT NULL,
               name        varchar(255)     NOT NULL,
-              weight      int(2) unsigned  NOT NULL
+              weight      int(2) unsigned  NOT NULL,
+              id          int(10) unsigned DEFAULT 0
             ) ENGINE=MyISAM',
 
             'DROP TABLE IF EXISTS osname',
@@ -290,7 +291,7 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2008-2010 Barbie for Miss Barbell Productions.
+  Copyright (C) 2008-2011 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
   modify it under the same terms as Perl itself.

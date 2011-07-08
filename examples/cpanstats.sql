@@ -87,7 +87,8 @@ DROP TABLE IF EXISTS `page_requests`;
 CREATE TABLE `page_requests` (
   `type`        varchar(8)       NOT NULL,
   `name`        varchar(255)     NOT NULL,
-  `weight`      int(2) unsigned  NOT NULL
+  `weight`      int(2) unsigned  NOT NULL,
+  `id`          int(10) unsigned default 0
 );
 
 DROP TABLE IF EXISTS osname;
