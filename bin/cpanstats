@@ -28,9 +28,9 @@ my $t = CPAN::Testers::Data::Generator->new(
     logfile     => $options{log},
 );
 
-if($options{regenerate})    { $t->regenerate( map { $_ => $options{$_} } qw(gstart gend dstart dend file) ); }
-elsif($options{rebuild})    { $t->rebuild(    map { $_ => $options{$_} } qw(gstart gend dstart dend localonly check) ); }
-elsif($options{reparse})    { $t->reparse(    map { $_ => $options{$_} } qw(guid file force localonly check) ); }
+if($options{regenerate})    { $t->regenerate( { map { $_ => $options{$_} } qw(gstart gend dstart dend file) } ); }
+elsif($options{rebuild})    { $t->rebuild(    { map { $_ => $options{$_} } qw(gstart gend dstart dend localonly check) } ); }
+elsif($options{reparse})    { $t->reparse(    { map { $_ => $options{$_} } qw(guid file force localonly check) } ); }
 else                        { $t->generate(   $options{nonstop} ); }
 
 # -------------------------------------
@@ -51,7 +51,7 @@ sub init_options {
         'regenerate',
         'file=s',
 
-        'reparse=s',
+        'reparse',
 	'guid=s',
 	'force',
 
