@@ -372,24 +372,36 @@ $self->_log("START REPARSE\n");
     $self->{check}     = $hash->{check}     ? 1 : 0;
 
     for my $guid (@guids) {
-        my $report = $self->load_fact($guid);
-        $report = $self->get_fact($guid)    unless($report || $hash->{localonly});
+        my $report;
+        $report = $self->load_fact($guid)    unless($hash->{force});
 
-        unless($report) {
-            if($self->{localonly}) {
-		        $self->_log(".. report not available locally [$guid]\n");
-		        return 0;
+        if($report) {
+            $self->{report}{metabase} = decode_json($report);
+            $self->{report}{guid} = $guid;
+            $hash->{report} = $report;
+            if($self->reparse_report(%$hash)) {	# true if invalid report
+                $self->_log(".. cannot parse report [$guid]\n");
+                return 0;
             }
-	        $self->_log(".. report not found [$guid]\n");
-	        return 0;
-        }
+        } else {
+            $report = $self->get_fact($guid)    unless($report || $hash->{localonly});
 
-        $self->{report}{guid} = $guid;
-        $hash->{report} = $report;
-        if($self->parse_report(%$hash)) {	# true if invalid report
-	        $self->_log(".. cannot parse report [$guid]\n");
-	        return 0;
-	    }
+            unless($report) {
+                if($self->{localonly}) {
+                    $self->_log(".. report not available locally [$guid]\n");
+                    return 0;
+                }
+                $self->_log(".. report not found [$guid]\n");
+                return 0;
+            }
+            
+            $self->{report}{guid} = $guid;
+            $hash->{report} = $report;
+            if($self->parse_report(%$hash)) {	# true if invalid report
+                $self->_log(".. cannot parse report [$guid]\n");
+                return 0;
+            }
+        }
 
 	    if($self->store_report()) { $self->_log(".. stored"); }
 	    else                      {
