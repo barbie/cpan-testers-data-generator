@@ -1424,6 +1424,31 @@ within the cpanstats database.
 
 =back
 
+=head2 Very Private methods
+
+The following modules load information enmasse to avoid DB connection hogging 
+and IO blocking. Thus improving performance.
+
+=over 4
+
+=item * load_uploads
+
+Loads the upload information.
+
+=item * load_authors
+
+Loads information regarding each author's distribution.
+
+=item * load_perl_versions
+
+Loads all the known Perl versions.
+
+=item * save_perl_versions
+
+Saves any new Perl versions
+
+=back
+
 =head1 HISTORY
 
 The CPAN testers was conceived back in May 1998 by Graham Barr and Chris
