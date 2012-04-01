@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.01';
+$VERSION = '1.02';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -12,6 +12,7 @@ $VERSION = '1.01';
 use Config::IniFiles;
 use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
+use Data::Dumper;
 use File::Basename;
 use File::Path;
 use File::Slurp;
@@ -55,6 +56,8 @@ my @admins = (
     'barbie@missbarbell.co.uk',
     #'david@dagolden.com'
 );
+
+# the two hashes below should really be in a config!
 
 my $OSNAMES;
 my %OSNAMES = (
@@ -235,15 +238,8 @@ $self->_log("start=$start, end=$end\n");
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
         # what guids do we already have?
-        my @where;
-        push @where, "updated >= '$data->{dstart}'";
-        push @where, "updated <= '$data->{dend}'";
-        
-        my $sql =   'SELECT guid FROM metabase' . 
-                    (@where ? ' WHERE ' . join(' AND ',@where) : '') .
-                    ' ORDER BY updated asc';
-
-        my @guids = $self->{METABASE}->get_query('hash',$sql);
+        my $sql =   'SELECT guid FROM metabase WHERE updated >= ? AND updated <= ? ORDER BY updated asc';
+        my @guids = $self->{METABASE}->get_query('hash',$sql,$data->{dstart},$data->{dend});
         my %guids = map {$_->{guid} => 1} @guids;
 
         while($start le $end) {
@@ -298,7 +294,10 @@ sub rebuild {
 
     my $start = localtime(time);
     ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
-    $self->{reparse} = 1;
+
+    $self->{reparse}   = 1;
+    $self->{localonly} = $hash->{localonly} ? 1 : 0;
+    $self->{check}     = $hash->{check}     ? 1 : 0;
 
 $self->_log("START REBUILD\n");
 
@@ -363,36 +362,47 @@ $self->_log("STOP REBUILD\n");
 }
 
 sub reparse {
-    my ($self,$hash,@guids) = @_;
+    my ($self,$hash) = @_;
 $self->_log("START REPARSE\n");
+
+    my @guids = $self->_get_guid_list($hash->{guid},$hash->{file});
     return  unless(@guids);
 
-    $self->{reparse} = 1;
+    $self->{reparse}   = $self->{force}     ? 0 : 1;
+    $self->{localonly} = $hash->{localonly} ? 1 : 0;
+    $self->{check}     = $hash->{check}     ? 1 : 0;
 
     for my $guid (@guids) {
-        if(my $report = $self->get_fact($guid)) {
-            $self->{report}{guid} = $guid;
-            $hash->{report} = $report;
-            if($self->parse_report(%$hash)) {	# true if invalid report
-		        $self->_log(".. cannot parse report [$guid]\n");
-		        return 0;
-		    }
+        my $report = $self->load_fact($guid);
+        $report = $self->get_fact($guid)    unless($report || $hash->{localonly});
 
-		    if($self->store_report()) { $self->_log(".. stored"); }
-		    else                      {
-		        if($self->{time} gt $self->{report}{updated}) {
-		            $self->_log(".. FAIL: older than requested [$self->{time}]\n");
-		            return 0;
-                }
+        unless($report) {
+            if($self->{localonly}) {
+		        $self->_log(".. report not available locally [$guid]\n");
+		        return 0;
+            }
+	        $self->_log(".. report not found [$guid]\n");
+	        return 0;
+        }
+
+        $self->{report}{guid} = $guid;
+        $hash->{report} = $report;
+        if($self->parse_report(%$hash)) {	# true if invalid report
+	        $self->_log(".. cannot parse report [$guid]\n");
+	        return 0;
+	    }
+
+	    if($self->store_report()) { $self->_log(".. stored"); }
+	    else                      {
+	        if($self->{time} gt $self->{report}{updated}) {
+	            $self->_log(".. FAIL: older than requested [$self->{time}]\n");
+	            return 0;
+            }
             
-            	$self->_log(".. already stored");
-        	}
-        	if($self->cache_report()) { $self->_log(".. cached\n"); }
-        	else                      { $self->_log(".. FAIL: bad cache data\n"); }
-    	} else {
-        	$self->_log(".. FAIL\n");
-        	return 0;
-    	}
+           	$self->_log(".. already stored");
+       	}
+       	if($self->cache_report()) { $self->_log(".. cached\n"); }
+       	else                      { $self->_log(".. FAIL: bad cache data\n"); }
 	}
 
     $self->commit();
@@ -511,6 +521,15 @@ sub already_saved {
     my @rows = $self->{METABASE}->get_query('array','SELECT id FROM metabase WHERE guid=?',$guid);
     return 1	if(@rows);
     return 0;
+}
+
+sub load_fact {
+    my ($self,$guid) = @_;
+    my @rows = $self->{METABASE}->get_query('array','SELECT report FROM metabase WHERE guid=?',$guid);
+    return $rows[0]->[0] if(@rows);
+
+    $self->_log(" ... no report [guid=$guid]\n");
+    return;
 }
 
 sub get_fact {
@@ -707,14 +726,25 @@ sub store_report {
     if(@rows) {
         if($self->{reparse}) {
             my ($guid,@update) = @values;
-            $self->{CPANSTATS}->do_query($SQL{UPDATE}{CPANSTATS},@update,$guid);
+            if($self->{check}) {
+                $self->_log( "CHECK: $SQL{UPDATE}{CPANSTATS},[" . join(',',@update,$guid) . "]\n" );
+            } else {
+                $self->{CPANSTATS}->do_query($SQL{UPDATE}{CPANSTATS},@update,$guid);
+            }
         } else {
             $self->{report}{id} = $rows[0]->[0];
             return 0;
         }
     } else {
-        $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{CPANSTATS},@values);
+        if($self->{check}) {
+            $self->_log( "CHECK: $SQL{INSERT}{CPANSTATS},[" . join(',',@values) . "]\n" );
+        } else {
+            $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{CPANSTATS},@values);
+        }
     }
+
+    # in check mode, assume the rest happens
+    return 1 if($self->{check});
 
     # update the sqlite database
     @rows = $self->{LITESTATS}->get_query('array',$SQL{SELECT}{LITESTATS},$values[0]);
@@ -796,11 +826,15 @@ sub cache_report {
     my $self = shift;
     return  unless($self->{report}{guid} && $self->{report}{metabase});
 
-    $self->{'METABASE'}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report) VALUES (?,?,?,?)',
+    # in check mode, assume the rest happens
+    return 1 if($self->{check});
+    return 1 if($self->{localonly});
+
+    $self->{METABASE}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report) VALUES (?,?,?,?)',
         $self->{report}{guid},$self->{report}{id},$self->{report}{updated},encode_json($self->{report}{metabase}));
 
     if((++$self->{meta_count} % 500) == 0) {
-        $self->{CPANSTATS}->do_commit;
+        $self->{METABASE}->do_commit;
     }
 
     return 1;
@@ -810,10 +844,14 @@ sub cache_update {
     my $self = shift;
     return  unless($self->{report}{guid} && $self->{report}{id});
 
-    $self->{'METABASE'}->do_query('UPDATE metabase SET id=? WHERE guid=?',$self->{report}{id},$self->{report}{guid});
+    # in check mode, assume the rest happens
+    return 1 if($self->{check});
+    return 1 if($self->{localonly});
+
+    $self->{METABASE}->do_query('UPDATE metabase SET id=? WHERE guid=?',$self->{report}{id},$self->{report}{guid});
 
     if((++$self->{meta_count} % 500) == 0) {
-        $self->{CPANSTATS}->do_commit;
+        $self->{METABASE}->do_commit;
     }
 
     return 1;
@@ -821,6 +859,38 @@ sub cache_update {
 
 #----------------------------------------------------------------------------
 # Private Functions
+
+sub _get_guid_list {
+    my ($self,$guid,$file) = @_;
+    my (@ids,@guids);
+
+    # we're only parsing one id
+    if($guid) {
+        if($guid =~ /^\d+$/)    { push @ids,   $guid }
+        else                    { push @guids, $guid }
+    } elsif($file) {
+        my $fh = IO::File->new($file,'r')       or die "Cannot read file [$file]: $!";
+        while(<$fh>) {
+            chomp;
+            my ($num) = (m/^([\da-z-]+)/i);
+            if($guid =~ /^\d+$/)    { push @ids,   $guid }
+            else                    { push @guids, $guid }
+        }
+        $fh->close;
+    } else {
+        return;
+    }
+
+    # turn ids into guids
+    if(@ids) {
+        my @rows = $self->{CPANSTATS}->get_query('array','SELECT guid FROM cpanstats WHERE id IN ('.join(',',@ids).')');
+        push @guids, $_->[0] for(@rows);
+    }
+
+    my %guids = map {$_ => 1} @guids;
+    my @list  = keys %guids;
+    return @list;
+}
 
 sub _get_createdate {
     my ($self,$guid,$date) = @_;
@@ -1258,9 +1328,13 @@ report as appropriate. Updates Recent JSON & RSS files.
 Given a guid, determines whether it has already been saved in the local
 metabase cache.
 
+=item * load_fact
+
+Get a specific report fact for a given GUID, from the local database.
+
 =item * get_fact
 
-Get a specific report factfor a given GUID.
+Get a specific report fact for a given GUID, from the Metabase.
 
 =item * parse_report
 
@@ -1360,8 +1434,9 @@ changes, a new name was given to the distribution.
 
 =head2 CPAN-Testers-Data-Generator
 
-  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2011
+  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2012
 
 =head1 LICENSE
 
-This code is distributed under the Artistic License 2.0.
+  This module is free software; you can redistribute it and/or
+  modify it under the Artistic License 2.0.
