@@ -1,5 +1,12 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+1.02    01/04/2012
+	- reworked regenerate functionality and script.
+	- reworked reparse functionality and script to use Metabase API.
+	- added handling of localonly and check options.
+	- updated script:
+            bin/cpanstats			(v1.02)
+
 1.01    22/01/2012
 	- generator now builds a JSON and RSS file of the last n reports.
 	- added id to page_request insert (to speed up page builder).
