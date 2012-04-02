@@ -107,9 +107,9 @@ sub new {
     }
 
     # build OS names map
-    @rows = $self->{CPANSTATS}->get_query('array','SELECT osname,ostitle FROM osname');
+    @rows = $self->{CPANSTATS}->get_query('array','SELECT osname FROM osname');
     for my $row (@rows) {
-        $self->{OSNAMES}{lc $row->[0]} ||= $row->[1];
+        $self->{OSNAMES}{lc $row->[0]} ||= lc $row->[0];
     }
     $OSNAMES = join('|',keys %{$self->{OSNAMES}})   if(keys %{$self->{OSNAMES}});
 
