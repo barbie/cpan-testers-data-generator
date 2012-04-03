@@ -26,6 +26,7 @@ t/data/ad3189d0-3510-11df-89c9-1bb9c3681c0d.json
 t/data/af820e12-3510-11df-89c9-1bb9c3681c0d.json
 t/data/b248f71e-3510-11df-89c9-1bb9c3681c0d.json
 t/data/b77e7132-3510-11df-89c9-1bb9c3681c0d.json
+t/data/testers.csv
 t/test-config.ini
 templates/mail-bad-reports.eml
 templates/mail-bad-uploads.eml

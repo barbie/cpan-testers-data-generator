@@ -124,7 +124,7 @@ sub new {
 
     if($cfg->SectionExists('OSNAMES')) {
         for my $param ($cfg->Parameters('OSNAMES')) {
-            $self->{OSNAMES}{lc $param} ||= $cfg->val('OSNAMES',$param);
+            $self->{OSNAMES}{lc $param} ||= lc $cfg->val('OSNAMES',$param);
         }
     }
 
