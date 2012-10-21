@@ -92,7 +92,7 @@ sub new {
     }
 
     # command line swtiches override configuration settings
-    for my $key (qw(logfile poll_limit stopfile offset json_file rss_file rss_limit reportlink)) {
+    for my $key (qw(logfile poll_limit stopfile offset json_file rss_file rss_limit reportlink aws_bucket aws_namespace)) {
         $self->{$key} = $hash{$key} || $cfg->val('MAIN',$key);
     }
 
@@ -135,8 +135,9 @@ sub new {
     }
 
     $self->{metabase} = CPAN::Testers::Metabase::AWS->new(
-        bucket      => 'cpantesters',
-        namespace   => 'beta3',
+        bucket      => $self->{aws_bucket},
+        namespace   => $self->{aws_namespace},
+
     );
     $self->{librarian} = $self->{metabase}->public_librarian;
 
