@@ -35,7 +35,7 @@ BEGIN {
     eval {
         $meta = CPAN::Testers::Metabase::AWS->new(
             bucket      => 'cpantesters',
-            namespace   => 'beta2',
+            namespace   => 'beta4',
         );
     };
     diag('No AWS key')   unless($meta);
