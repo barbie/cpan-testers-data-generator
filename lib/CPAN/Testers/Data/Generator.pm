@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.02';
+$VERSION = '1.03';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -12,7 +12,7 @@ $VERSION = '1.02';
 use Config::IniFiles;
 use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
-use Data::Dumper;
+#use Data::Dumper;
 use File::Basename;
 use File::Path;
 use File::Slurp;
@@ -244,7 +244,7 @@ $self->_log("start=$start, end=$end\n");
         # note that because Amazon's SimpleDB can return odd entries out of 
         # sync, we have to look at previous entries to ensure we are starting
         # from the right point
-        my $update,$prev,$last) = ($start,$start,$start);
+        my ($update,$prev,$last) = ($start,$start,$start);
 
         while($update le $end && $prev le $end) {
             # get list of guids from given start date
@@ -377,7 +377,7 @@ $self->_log("START PARSE\n");
     $self->{force} ||= 0;
 
     for my $guid (@guids) {
-        $self->_log("GUID [$row->{guid}]");
+        $self->_log("GUID [$guid]");
 
         my ($report,$stored);
         unless($hash->{force}) {
@@ -428,7 +428,7 @@ $self->_log("START REPARSE\n");
     $self->{check}     = $hash->{check}     ? 1 : 0;
 
     for my $guid (@guids) {
-        $self->_log("GUID [$row->{guid}]");
+        $self->_log("GUID [$guid]");
 
         my $report;
         $report = $self->load_fact($guid)    unless($hash->{force});
@@ -503,8 +503,8 @@ sub get_next_guids {
         my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase ORDER BY updated DESC LIMIT 5');
         for my $row (@rows) {
             if($self->{time}) {
-                my {@dt1) = $self->{time} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
-                my {@dt2) = $row->[0]     =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+                my (@dt1) = $self->{time} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+                my (@dt2) = $row->[0]     =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
                 my $dt1 = timelocal(reverse @dt1);
                 my $dt2 = timelocal(reverse @dt2);
 
@@ -707,7 +707,6 @@ $self->{msg} .= ".. time [$self->{report}{created}][$self->{report}{updated}]";
         $self->{report}{type}   = 3;
     }
 
-    #use Data::Dumper;
     #print STDERR "\n====\nreport=".Dumper($self->{report});
 
     return 1  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));
@@ -1137,7 +1136,6 @@ sub _check_arch_os {
 #print STDERR "_check: osname=$self->{report}{osname}\n";
     return	if($text && $self->{report}{osname} && lc $text eq lc $self->{report}{osname});
 
-#use Data::Dumper;
 #print STDERR "_check: metabase=".Dumper($self->{report}{metabase})."\n";
     my $fact = decode_json($self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'}{content});
     my $textreport = $fact->{textreport};

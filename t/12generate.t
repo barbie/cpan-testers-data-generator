@@ -14,7 +14,7 @@ use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
 use CPAN::Testers::Data::Generator;
 use CPAN::Testers::Metabase::AWS;
-use Data::Dumper;
+#use Data::Dumper;
 use File::Path;
 use IO::File;
 use JSON;

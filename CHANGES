@@ -1,11 +1,17 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+1.03    2012-10-21
         - spelling fixes. (thanks to Florian Schlichting & Gregor Herrmann).
         - AWS values are now configure settings, that can be overridden on the
           command line.
         - compensate for Amazon SimpleDB's brokeness with dates.
         - added parse function for specific GUIDs.
         - change file dates changed to meet W3CDTF standards.
+        - META tests no longer require specific versions.
+        - reworked Makefile.PL for clarity.
+        - License updated to Artistic License v2.0.
+        - added minimum perl version (5.006).
+        - added missing prerequisite.
 
 1.02    2012-04-01
         - reworked regenerate functionality and script.
