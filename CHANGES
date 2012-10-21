@@ -1,8 +1,10 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
 	- spelling fixes. (thanks to Florian Schlichting & Gregor Herrmann).
-        - AWS values are now configure settings, that can be overridden on the
-          command line
+	- AWS values are now configure settings, that can be overridden on the
+          command line.
+	- compensate for Amazon SimpleDB's brokeness with dates.
+	- added parse function for specific GUIDs.
 
 1.02    01/04/2012
 	- reworked regenerate functionality and script.

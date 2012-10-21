@@ -137,7 +137,6 @@ sub new {
     $self->{metabase} = CPAN::Testers::Metabase::AWS->new(
         bucket      => $self->{aws_bucket},
         namespace   => $self->{aws_namespace},
-
     );
     $self->{librarian} = $self->{metabase}->public_librarian;
 
@@ -242,7 +241,12 @@ $self->_log("start=$start, end=$end\n");
         my @guids = $self->{METABASE}->get_query('hash',$sql,$data->{dstart},$data->{dend});
         my %guids = map {$_->{guid} => 1} @guids;
 
-        while($start le $end) {
+        # note that because Amazon's SimpleDB can return odd entries out of 
+        # sync, we have to look at previous entries to ensure we are starting
+        # from the right point
+        my $update,$prev,$last) = ($start,$start,$start);
+
+        while($update le $end && $prev le $end) {
             # get list of guids from given start date
             my $guids = $self->get_next_guids($start);
 
@@ -258,7 +262,7 @@ $self->_log("start=$start, end=$end\n");
                     }
 
                     if(my $report = $self->get_fact($guid)) {
-                        $start = $report->{metadata}{core}{update_time};
+                        $update = $report->{metadata}{core}{update_time};
                         $self->{report}{guid}   = $guid;
                         next    if($self->parse_report(report => $report)); # true if invalid report
 
@@ -270,7 +274,9 @@ $self->_log("start=$start, end=$end\n");
                         $self->_log(".. FAIL\n");
                     }
 
-                    last    if($start gt $end);
+                    last    if($update gt $end && $last gt $end);
+                    $prev = $last;
+                    $last = $update;
                 }
             }
 
@@ -361,6 +367,55 @@ $self->_log("START sql=[$sql]\n");
 $self->_log("STOP REBUILD\n");
 }
 
+sub parse {
+    my ($self,$hash) = @_;
+$self->_log("START PARSE\n");
+
+    my @guids = $self->_get_guid_list($hash->{guid},$hash->{file});
+    return  unless(@guids);
+
+    $self->{force} ||= 0;
+
+    for my $guid (@guids) {
+        $self->_log("GUID [$row->{guid}]");
+
+        my ($report,$stored);
+        unless($hash->{force}) {
+            $report = $self->load_fact($guid);
+            $stored = $self->retrieve_report($guid);
+        }
+
+        if($report && $stored) {
+            $self->_log(".. report already stored and cached\n");
+            next;
+        }
+
+        $report = $self->get_fact($guid);
+
+        unless($report) {
+            $self->_log(".. report not found [$guid]\n");
+            next;
+        }
+            
+        $self->{report}{guid} = $guid;
+        $hash->{report} = $report;
+        if($self->parse_report(%$hash)) {	# true if invalid report
+            $self->_log(".. cannot parse report [$guid]\n");
+            next;
+        }
+
+	    if($self->store_report()) { $self->_log(".. stored"); }
+	    else                      { $self->_log(".. already stored"); }
+
+       	if($self->cache_report()) { $self->_log(".. cached\n"); }
+       	else                      { $self->_log(".. FAIL: bad cache data\n"); }
+	}
+
+    $self->commit();
+$self->_log("STOP PARSE\n");
+    return 1;
+}
+
 sub reparse {
     my ($self,$hash) = @_;
 $self->_log("START REPARSE\n");
@@ -373,6 +428,8 @@ $self->_log("START REPARSE\n");
     $self->{check}     = $hash->{check}     ? 1 : 0;
 
     for my $guid (@guids) {
+        $self->_log("GUID [$row->{guid}]");
+
         my $report;
         $report = $self->load_fact($guid)    unless($hash->{force});
 
@@ -440,8 +497,22 @@ sub get_next_guids {
     if($start) {
         $self->{time} = $start;
     } else {
-        my @rows = $self->{METABASE}->get_query('array','SELECT MAX(updated) FROM metabase');
-        $self->{time} = $rows[0]->[0]	if(@rows);
+        # note that because Amazon's SimpleDB can return odd entries out of 
+        # sync, we have to look at previous entries to ensure we are starting
+        # from the right point
+        my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase ORDER BY updated DESC LIMIT 5');
+        for my $row (@rows) {
+            if($self->{time}) {
+                my {@dt1) = $self->{time} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+                my {@dt2) = $row->[0]     =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+                my $dt1 = timelocal(reverse @dt1);
+                my $dt2 = timelocal(reverse @dt2);
+
+                next if($dt1-$dt2 < 60);
+            }
+
+            $self->{time} = $row->[0];
+        }
 
         $self->{time} ||= '1999-01-01T00:00:00Z';
         if($self->{last} ge $self->{time}) {
@@ -1372,6 +1443,16 @@ a particular field, which now has supporting parsing code within the codebase.
 In addition there is the option to exclude fields from parsing checks, where
 they may be corrupted, and can be later amended using the 'cpanstats-update'
 tool.
+
+=item * parse
+
+Unlike reparse, parse is used to parse just missing reports. As such if a
+report has already been stored and cached, it won't be processed again, unless
+the 'force' option is used.
+
+In addition, as per reparse, there is the option to exclude fields from parsing
+checks, where they may be corrupted, and can be later amended using the 
+'cpanstats-update' tool.
 
 =back
 
