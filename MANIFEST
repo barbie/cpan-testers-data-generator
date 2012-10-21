@@ -2,7 +2,7 @@ bin/cpanstats
 bin/cpanstats-delete
 bin/cpanstats-select
 bin/cpanstats-update
-CHANGES
+Changes
 examples/cpanstats-createdb
 examples/cpanstats-verify.sh
 examples/cpanstats.sql
