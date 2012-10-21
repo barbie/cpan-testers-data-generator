@@ -221,7 +221,7 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
         - added more test samples
         - added more tests
 
-0.22    Thu Feb  3 15:27:41 GMT 2005
+0.22    2005-02-03T15:27:41
         - now includes perl + OS version in the testers.db
         - use SQLite 3.0
         - bin/cpan_www_testers_generate expanded to give more
@@ -231,11 +231,11 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
         - added more POD
         - (thanks to Barbie)
 
-0.21    Sun Mar  7 18:31:35 GMT 2004
+0.21    2004-03-07T18:31:35
         - the NNTP cache now uses SQLite instead of DB_File
         - rename Changes to CHANGES
 
-0.20    Wed Aug 13 21:52:06 BST 2003
+0.20    2003-08-13T21:52:06
         - make sure to HTML escape everything
         - design update, now with CSS
         - Fix bug where reports are use A/AM/AMS/Crypt-TEA-1.22.tar.gz
@@ -247,5 +247,5 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
         - moved examples/generate.pl to an installed script,
           bin/cpan_www_testers_generate
 
-0.10    Thu Jul 31 23:09:25 BST 2003
+0.10    2003-07-31T23:09:25
         - initial release
