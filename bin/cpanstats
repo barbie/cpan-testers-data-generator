@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 
-my $VERSION = '1.01';
+my $VERSION = '1.04';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -11,7 +11,7 @@ use lib qw(../lib lib);
 use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 
-use CPAN::Testers::Data::Generator   '1.01';
+use CPAN::Testers::Data::Generator   '1.04';
 
 #----------------------------------------------------------------------------
 # Variables
@@ -31,6 +31,7 @@ my $t = CPAN::Testers::Data::Generator->new(
 if($options{regenerate})    { $t->regenerate( { map { $_ => $options{$_} } qw(gstart gend dstart dend file) } ); }
 elsif($options{rebuild})    { $t->rebuild(    { map { $_ => $options{$_} } qw(gstart gend dstart dend localonly check) } ); }
 elsif($options{reparse})    { $t->reparse(    { map { $_ => $options{$_} } qw(guid file force localonly check) } ); }
+elsif($options{parse})      { $t->parse(      { map { $_ => $options{$_} } qw(guid file force) } ); }
 else                        { $t->generate(   $options{nonstop} ); }
 
 # -------------------------------------
@@ -51,6 +52,7 @@ sub init_options {
         'regenerate',
         'file=s',
 
+        'parse',
         'reparse',
 	'guid=s',
 	'force',
@@ -76,7 +78,8 @@ Usage: $0 \
     [-c=<file>] [-log=<file>]                                               \
     [--rebuild ( --gstart=s [--gend=s] | --dstart=s [--dend=s] )]           \
     [--regenerate ( --gstart=s --gend=s | --dstart=s --dend=s | --file=s )] \
-    [--reparse=s [--force] (--guid=s | --file=s )]                                    \
+    [--reparse=s [--force] (--guid=s | --file=s )]                          \
+    [--parse=s [--force] (--guid=s | --file=s )]                            \
     [--check] [--localonly]                                                 \
     [-n] [-h] [-v]
 
@@ -93,6 +96,7 @@ Usage: $0 \
   --regenerate  regenerate between two dates/guids.
   --file=<file> file of guid/date ranges, one per line
 
+  --parse	parse a specific set of guids from the metabase
   --reparse     reparse a specific guid from the metabase
   --force       force a request from Metabase rather than local database
   --guid=<guid> reparse specific guid
@@ -139,6 +143,14 @@ cpanstats - script to access the Metabase server and update the database.
   cpanstats -c=data/settings.ini --regenerate --dstart=$date1 --dend=$date2
   cpanstats -c=data/settings.ini --regenerate --file=$file
   
+  # parse a single report from remote metabase
+  cpanstats -c=data/settings.ini --parse --guid=$guid1
+  cpanstats -c=data/settings.ini --parse --file=$file
+  cpanstats -c=data/settings.ini --parse --guid=$guid1 --force
+
+'parse' will only request a new report from the Metabase, if one doesn't
+exist in the local database.
+
   # reparse a single report from remote metabase
   cpanstats -c=data/settings.ini --reparse --guid=$guid1
   cpanstats -c=data/settings.ini --reparse --file=$file
