@@ -32,6 +32,7 @@ if($options{regenerate})    { $t->regenerate( { map { $_ => $options{$_} } qw(gs
 elsif($options{rebuild})    { $t->rebuild(    { map { $_ => $options{$_} } qw(gstart gend dstart dend localonly check) } ); }
 elsif($options{reparse})    { $t->reparse(    { map { $_ => $options{$_} } qw(guid file force localonly check) } ); }
 elsif($options{parse})      { $t->parse(      { map { $_ => $options{$_} } qw(guid file force) } ); }
+elsif($options{tail})       { $t->tail(       { map { $_ => $options{$_} } qw(file) } ); }
 else                        { $t->generate(   $options{nonstop} ); }
 
 # -------------------------------------
@@ -44,18 +45,19 @@ sub init_options {
         'nonstop|n',
 
         'rebuild',
+        'regenerate',
+        'reparse',
+        'parse',
+        'tail',
+
         'gstart=s',
         'gend=s',
         'dstart=s',
         'dend=s',
 
-        'regenerate',
         'file=s',
-
-        'parse',
-        'reparse',
-	'guid=s',
-	'force',
+        'guid=s',
+        'force',
 
         'check',
         'localonly',
@@ -75,12 +77,13 @@ sub help {
         print <<HERE;
 
 Usage: $0 \
-    [-c=<file>] [-log=<file>]                                               \
-    [--rebuild ( --gstart=s [--gend=s] | --dstart=s [--dend=s] )]           \
-    [--regenerate ( --gstart=s --gend=s | --dstart=s --dend=s | --file=s )] \
-    [--reparse=s [--force] (--guid=s | --file=s )]                          \
-    [--parse=s [--force] (--guid=s | --file=s )]                            \
-    [--check] [--localonly]                                                 \
+    [--confile=<file>] [--log=<file>]                                                  \
+    [--rebuild    ( --gstart=s [--gend=s] | --dstart=s [--dend=s] )]           \
+    [--regenerate ( --gstart=s  --gend=s  | --dstart=s  --dend=s | --file=s )] \
+    [--reparse    [--force] (--guid=s | --file=s )]                            \
+    [--parse      [--force] (--guid=s | --file=s )]                            \
+    [--tail                             --file=s  ]                            \
+    [--check] [--localonly]                                                    \
     [-n] [-h] [-v]
 
   -c=<file>     configuration file
@@ -96,11 +99,15 @@ Usage: $0 \
   --regenerate  regenerate between two dates/guids.
   --file=<file> file of guid/date ranges, one per line
 
-  --parse	parse a specific set of guids from the metabase
   --reparse     reparse a specific guid from the metabase
   --force       force a request from Metabase rather than local database
   --guid=<guid> reparse specific guid
   --file=<file> file of guid/date ranges, one per line
+
+  --parse       parse a specific set of guids from the metabase
+
+  --tail        tail of GUIDs from the metabase
+  --file=<file> output file of GUIDs, one per line
 
   --check       check whether expected results (dry run)
   --localonly   only use local database where appropriate [rebuild, reparse]
@@ -160,6 +167,9 @@ exist in the local database.
 Note that by default 'reparse' will request a new report from the Metabase,
 but won't update the local copies if the already exist. The 'force' option
 will ensure that the even local copies are updated.
+
+  # tail the reports last entered into the remote metabase
+  cpanstats -c=data/settings.ini --tail --file=$file
 
 =head1 DESCRIPTION
 
