@@ -3,6 +3,7 @@ Revision history for Perl module CPAN::Testers::Data::Generator.
         - script updates:
             bin/cpanstats                       (v1.04)
         - CHANGES => Changes.
+        - added tail feature.
 
 1.03    2012-10-21
         - spelling fixes. (thanks to Florian Schlichting & Gregor Herrmann).
