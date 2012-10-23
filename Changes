@@ -1,5 +1,6 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+1.04    2012-10-23
         - script updates:
             bin/cpanstats                       (v1.04)
         - CHANGES => Changes.

@@ -487,7 +487,7 @@ $self->_log("START TAIL\n");
 
     my $guids = $self->get_tail_guids();
     my $fh = IO::File->new($hash->{file},'a+') or die "Cannot read file [$hash->{file}]: $!";
-    print "$_\n"    for(@$guids);
+    print $fh "$_\n"    for(@$guids);
     $fh->close;
 
 $self->_log("STOP TAIL\n");
