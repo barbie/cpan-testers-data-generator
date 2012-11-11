@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
 
-my $VERSION = '1.04';
+my $VERSION = '1.05';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -11,7 +11,7 @@ use lib qw(../lib lib);
 use Getopt::ArgvFile default=>1;
 use Getopt::Long;
 
-use CPAN::Testers::Data::Generator   '1.04';
+use CPAN::Testers::Data::Generator   '1.05';
 
 #----------------------------------------------------------------------------
 # Variables
@@ -149,7 +149,7 @@ cpanstats - script to access the Metabase server and update the database.
   cpanstats -c=data/settings.ini --regenerate --gstart=$guid1 --gend=$guid2
   cpanstats -c=data/settings.ini --regenerate --dstart=$date1 --dend=$date2
   cpanstats -c=data/settings.ini --regenerate --file=$file
-  
+
   # parse a single report from remote metabase
   cpanstats -c=data/settings.ini --parse --guid=$guid1
   cpanstats -c=data/settings.ini --parse --file=$file
@@ -184,7 +184,7 @@ bug or are experiencing difficulties, that is not explained within the POD
 documentation, please send an email to barbie@cpan.org. However, it would help
 greatly if you are able to pinpoint problems or even supply a patch.
 
-Fixes are dependant upon their severity and my availablity. Should a fix not
+Fixes are dependent upon their severity and my availability. Should a fix not
 be forthcoming, please feel free to (politely) remind me.
 
 RT Queue -
@@ -192,6 +192,7 @@ http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 
+L<CPAN::Testers::WWW::Reports>,
 L<CPAN::Testers::WWW::Statistics>
 
 F<http://www.cpantesters.org/>,
@@ -208,6 +209,6 @@ F<http://wiki.cpantesters.org/>
   Copyright (C) 2005-2012 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
-  modify it under the same terms as Perl itself.
+  modify it under the Artistic License 2.0.
 
 =cut

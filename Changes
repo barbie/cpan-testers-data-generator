@@ -1,5 +1,15 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+	- parse message fix.
+	- disabled SQLite updates.
+        - new script:
+            bin/cpanstats-sqlite                (v0.01)
+        - script updates:
+            bin/cpanstats                       (v1.05)
+            bin/cpanstats-select                (v0.12)
+            bin/cpanstats-update                (v0.10)
+            bin/cpanstats-delete                (v0.15)
+
 1.04    2012-10-23
         - script updates:
             bin/cpanstats                       (v1.04)

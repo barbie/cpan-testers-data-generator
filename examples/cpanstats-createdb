@@ -130,7 +130,7 @@ sub process {
                 pass        int(10) default 0,
                 fail        int(10) default 0,
                 na          int(10) default 0,
-                unknown     int(10) default 0
+                unknown     int(10) default 0,
                 PRIMARY KEY (id,guid),
                 INDEX (dist,version)
             )',

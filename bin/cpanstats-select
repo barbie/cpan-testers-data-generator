@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.11';
+my $VERSION = '0.12';
 
 #----------------------------------------------------------------------------
 
@@ -27,7 +27,7 @@ cpanstats-select - select stats from the CPAN Testers Statistics database.
     [--date|-y=<YYYYMM>]            \
     [--tester|-t=<email>]           \
     [--platform|-o=<platform>]      \
-    [--perl|-p=<perlversion>]       
+    [--perl|-p=<perlversion>]
 
 =head1 DESCRIPTION
 
@@ -145,7 +145,7 @@ sub init_options {
 
     $options{grade} = lc $options{grade}    if($options{grade});
 
-    help(1,"Must specify the configuration file")              unless($options{config});
+    help(1,"Must specify the configuration file")               unless(   $options{config});
     help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
 
     help(1,"Must specify the database code (CPANSTATS or LITESTATS)")
@@ -212,7 +212,7 @@ There are no known bugs at the time of this release. However, if you spot a
 bug or are experiencing difficulties, that is not explained within the POD
 documentation, please send bug reports and patches to the RT Queue (see below).
 
-Fixes are dependant upon their severity and my availablity. Should a fix not
+Fixes are dependent upon their severity and my availability. Should a fix not
 be forthcoming, please feel free to (politely) remind me.
 
 RT Queue -
@@ -220,7 +220,7 @@ http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 =head1 SEE ALSO
 
-L<CPAN::WWW::Testers>,
+L<CPAN::Testers::WWW::Reports>,
 L<CPAN::Testers::WWW::Statistics>
 
 F<http://www.cpantesters.org/>,
@@ -234,10 +234,10 @@ for Miss Barbell Productions L<http://www.missbarbell.co.uk>.
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2010 Barbie for Miss Barbell Productions
+  Copyright (C) 2005-2012 Barbie for Miss Barbell Productions
   All Rights Reserved.
 
   This module is free software; you can redistribute it and/or
-  modify it under the same terms as Perl itself.
+  modify it under the Artistic License 2.0.
 
 =cut

@@ -1,6 +1,7 @@
 bin/cpanstats
 bin/cpanstats-delete
 bin/cpanstats-select
+bin/cpanstats-sqlite
 bin/cpanstats-update
 Changes
 examples/cpanstats-createdb

@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.04';
+$VERSION = '1.05';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -31,6 +31,8 @@ use CPAN::Testers::Report;
 
 #----------------------------------------------------------------------------
 # Variables
+
+my $DIFF = 60;  # difference check in seconds
 
 my %testers;
 
@@ -77,7 +79,7 @@ sub new {
     my $cfg = Config::IniFiles->new( -file => $hash{config} );
 
     # configure databases
-    for my $db (qw(CPANSTATS LITESTATS METABASE)) {
+    for my $db (qw(CPANSTATS METABASE)) { # LITESTATS
         die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
         my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
         $opts{AutoCommit} = 0;
@@ -245,18 +247,20 @@ $self->_log("start=$start, end=$end\n");
         # sync, we have to look at previous entries to ensure we are starting
         # from the right point
         my ($update,$prev,$last) = ($start,$start,$start);
+        my @times = ($start);
 
         while($update le $end && $prev le $end) {
             # get list of guids from given start date
             my $guids = $self->get_next_guids($start);
 
             if($guids) {
-                for my $guid (@$guids) {
+                @guids = grep { !$guids{$_} } @$guids;
+                for my $guid (@guids) {
                     $self->_log("GUID [$guid]");
 
                     $self->{processed}++;
 
-                    if($guids{$guid}) {
+                    if($self->already_saved($guid)) {
                         $self->_log(".. already saved\n");
                         next;
                     }
@@ -274,9 +278,20 @@ $self->_log("start=$start, end=$end\n");
                         $self->_log(".. FAIL\n");
                     }
 
-                    last    if($update gt $end && $last gt $end);
-                    $prev = $last;
-                    $last = $update;
+                    shift @times    if(@times > 4); # one off
+                    push @times, $update;           # one on ... max 5
+
+                    my $times = 0;
+                    for my $time (@times) {
+                        next    if(_date_diff($end,$time) <= 0);
+                        $times++;
+                    }
+
+                    last    if($times == @times);   # stop if all past endh
+
+#                    last    if($update gt $end && $last gt $end);
+#                    $prev = $last;
+#                    $last = $update;
                 }
             }
 
@@ -381,7 +396,7 @@ $self->_log("START PARSE\n");
 
         my ($report,$stored);
         unless($hash->{force}) {
-            $report = $self->load_fact($guid);
+            $report = $self->load_fact($guid,1);
             $stored = $self->retrieve_report($guid);
         }
 
@@ -498,7 +513,7 @@ $self->_log("STOP TAIL\n");
 
 sub commit {
     my $self = shift;
-    for(qw(CPANSTATS LITESTATS)) {
+    for(qw(CPANSTATS)) { # LITESTATS
         next    unless($self->{$_});
         $self->{$_}->do_commit;
     }
@@ -527,6 +542,8 @@ sub get_next_guids {
     my ($self,$start) = @_;
     my ($guids,$time);
 
+    $self->_log("PRE time=[$self->{time}], last=[$self->{last}]\n");
+
     if($start) {
         $self->{time} = $start;
     } else {
@@ -536,12 +553,8 @@ sub get_next_guids {
         my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase ORDER BY updated DESC LIMIT 5');
         for my $row (@rows) {
             if($self->{time}) {
-                my (@dt1) = $self->{time} =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
-                my (@dt2) = $row->[0]     =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
-                my $dt1 = timelocal(reverse @dt1);
-                my $dt2 = timelocal(reverse @dt2);
-
-                next if($dt1-$dt2 < 60);
+                my $diff = _date_diff($self->{time},$row->[0]);
+                next if($diff < $DIFF);
             }
 
             $self->{time} = $row->[0];
@@ -642,11 +655,11 @@ sub already_saved {
 }
 
 sub load_fact {
-    my ($self,$guid) = @_;
+    my ($self,$guid,$check) = @_;
     my @rows = $self->{METABASE}->get_query('array','SELECT report FROM metabase WHERE guid=?',$guid);
     return $rows[0]->[0] if(@rows);
 
-    $self->_log(" ... no report [guid=$guid]\n");
+    $self->_log(" ... no report [guid=$guid]\n")    unless($check);
     return;
 }
 
@@ -867,7 +880,7 @@ sub store_report {
     return 1 if($self->{check});
 
     # update the sqlite database
-    $self->{LITESTATS}->do_query($SQL{REPLACE}{LITESTATS},$self->{report}{id},@values);
+#    $self->{LITESTATS}->do_query($SQL{REPLACE}{LITESTATS},$self->{report}{id},@values);
 
 #    @rows = $self->{LITESTATS}->get_query('array',$SQL{SELECT}{LITESTATS},$values[0]);
 #    if(@rows) {
@@ -1275,6 +1288,20 @@ sub _make_rss {
     }
 
     return $rss->as_string;
+}
+
+sub _date_diff {
+    my ($date1,$date2) = @_;
+
+    my (@dt1) = $date1 =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+    my (@dt2) = $date2 =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
+
+    return -1 unless(@dt1 && @dt2);
+
+    my $dt1 = timelocal(reverse @dt1);
+    my $dt2 = timelocal(reverse @dt2);
+
+    return $dt2 - $dt1;
 }
 
 sub _log {

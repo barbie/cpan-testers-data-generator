@@ -2,7 +2,7 @@
 use strict;
 $|++;
 
-my $VERSION = '0.10';
+my $VERSION = '0.01';
 
 #----------------------------------------------------------------------------
 
@@ -12,17 +12,15 @@ cpanstats-update - script to update entries in the cpanstats database.
 
 =head1 SYNOPSIS
 
-  perl cpanstats-update                 \
+  perl cpanstats-sqlite                 \
      --config=<file>                    \
-     --database=<dbcode>                \
      [-i=0] [--file=<file>]
 
 =head1 DESCRIPTION
 
-Using a nominated cpanstats database, this program will search for records
-matching the given id on the command line, or the list provided in a named file.
-If the named file is correctly formatted, the nominated columns will also be
-updated.
+This program updates the SQLite version of the cpanstats database from the
+MySQL version. If a single id, or file of ids are provided, these specific
+ids only are updated, otherwise all the latest records will be updated.
 
 =head1 OPTIONS
 
@@ -32,32 +30,14 @@ updated.
 
 Configuration file contain database access details.
 
-=item --database
-
-Specify the database to use, CPANSTATS or LITESTATS
-
 =item -i | --id
 
-Display the record matching the given NNTP id.
+Display the record matching the given cpanstats id.
 
 =item --file
 
-The named file will be used to retrieve a list of NNTP ids, and if correctly
-formatted will update columns for the nominated id.
-
-To display records for a list of ids, the file should look like:
-
-  1
-  2
-  3
-  4
-
-To update columns for given ids, the file should look like:
-
-  1,state='pass'
-  2,state='pass',dist='MyDist'
-
-Note that the second entry will update multiple columns
+The named file will be used to retrieve a list of cpanstats ids, one per
+line.
 
 =back
 
@@ -77,6 +57,14 @@ use IO::File;
 
 my (%options,@rows);
 
+my %SQL = (
+    'SelectMax'     => 'SELECT MAX(id) FROM cpanstats',
+    'SelectNew'     => 'SELECT id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type FROM cpanstats WHERE id > ?',
+    'SelectByID'    => 'SELECT id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type FROM cpanstats WHERE id = ?',
+    'Replace'       => 'REPLACE INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    'Insert'        => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+);
+
 # -------------------------------------
 # Program
 
@@ -86,32 +74,34 @@ init_options();
 
 ##### MAIN #####
 
-print "#id,guid,state,postdate,tester,dist,version,platform,perl\n";
-my @list = get_list();
-push @list, {id=>$options{id}}    if($options{id});
+if($options{id} || $options{file}) {
 
-for my $item (@list) {
-    @rows = $options{DB}->get_query('array',"SELECT * FROM cpanstats WHERE id=$item->{id}");
-    unless(@rows) {
-        $options{DB}->do_query("INSERT INTO cpanstats (id) VALUES ($item->{id})");
-    }
-    if($item->{set}) {
-        $options{DB}->do_query("UPDATE cpanstats SET $item->{set} WHERE id=$item->{id}");
+    my @list = get_list();
+    push @list, {id=>$options{id}}    if($options{id});
+
+    for my $item (@list) {
+        my @rows = $options{CPANSTATS}->get_query('array',$SQL{SelectByID},$item->{id});
+        next    unless(@rows);
+        $options{LITESTATS}->do_query($SQL{Replace},@{$rows[0]});
     }
 
-    @rows = $options{DB}->get_query('array',"SELECT * FROM cpanstats WHERE id=$item->{id}");
-    print join(",",@$_)."\n"   for(@rows);
+} else {
+
+    my @rows = $options{LITESTATS}->get_query('array',$SQL{SelectMax});
+    my $id = @rows ? $rows[0]->[0] : 0;
+    my $next = $options{CPANSTATS}->iterator('array',$SQL{SelectNew},$id);
+    while($row = $next->()) {
+        $options{LITESTATS}->do_query($SQL{Insert},@$row});
+    }
+
 }
-
-@rows = $options{DB}->get_query('array',"SELECT max(id) FROM cpanstats");
-print "\n#MAX ID=$rows[0][0]\n" if(@rows);
 
 # -------------------------------------
 # Subroutines
 
 =item get_list
 
-Returns the list of NNTP ids from the named file.
+Returns the list of cpanstats ids from the named file.
 
 =cut
 
@@ -123,10 +113,8 @@ sub get_list {
     my $fh = IO::File->new($file)       or die "Cannot open file [$file]: $!";
     while(<$fh>) {
         next    if(/^\s*$/);    # ignore empty lines
-        chomp;
-        my ($id,$str) = (m/^(\d+)(?:,(.*))?/);
-        $str =~ s/fulldate/date/        if($options{driver} =~ /sqlite/i);
-        push @list, {id=>$id,set=>$str} if($id);
+        s/\s+$//;
+        push @list, {id=>$id} if($id);
     }
     $fh->close;
 
@@ -142,7 +130,6 @@ Determine command line options and initialise any defaults.
 sub init_options {
     GetOptions( \%options,
         'config=s',
-        'database=s',
         'id|i=i',
         'file=s',
         'help|h',
@@ -155,20 +142,16 @@ sub init_options {
     help(1,"Must specify the configuration file")               unless(   $options{config});
     help(1,"Configuration file [$options{config}] not found")   unless(-f $options{config});
 
-    help(1,"Must specify the database code (CPANSTATS or LITESTATS)")
-        unless($options{database} && $options{database} =~ /^CPANSTATS|LITESTATS$/);
-
     # load configuration
     my $cfg = Config::IniFiles->new( -file => $options{config} );
 
     # configure databases
-    my $db = $options{database};
-    die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
-    my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
-    $options{DB} = CPAN::Testers::Common::DBUtils->new(%opts);
-    die "Cannot configure $db database\n" unless($options{DB});
-
-    $options{driver} = $opts{driver};
+    for my $db (qw(CPANSTATS LITESTATS)) {
+        die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
+        my %opts = map {$_ => $cfg->val($db,$_);} qw(driver database dbfile dbhost dbport dbuser dbpass);
+        $options{$db} = CPAN::Testers::Common::DBUtils->new(%opts);
+        die "Cannot configure $db database\n" unless($options{$db});
+    }
 }
 
 sub help {
@@ -181,7 +164,6 @@ sub help {
 
 Usage: $0
      --config=<file>                - configuration file
-     --database=<dbcode>            - CPANSTATS or LITESTATS
 
     [--id=<num>]                    - refresh this id
     [--file=<file>]                 - refresh these ids (1 per line)
@@ -229,10 +211,9 @@ F<http://wiki.cpantesters.org/>
 
 =head1 COPYRIGHT AND LICENSE
 
-  Copyright (C) 2005-2012 Barbie for Miss Barbell Productions.
+  Copyright (C) 2012 Barbie for Miss Barbell Productions.
 
   This module is free software; you can redistribute it and/or
-  modify it under the Artistic License 2.0.
+  modify it under the same terms as Perl itself.
 
 =cut
-
