@@ -90,8 +90,8 @@ if($options{id} || $options{file}) {
     my @rows = $options{LITESTATS}->get_query('array',$SQL{SelectMax});
     my $id = @rows ? $rows[0]->[0] : 0;
     my $next = $options{CPANSTATS}->iterator('array',$SQL{SelectNew},$id);
-    while($row = $next->()) {
-        $options{LITESTATS}->do_query($SQL{Insert},@$row});
+    while(my $row = $next->()) {
+        $options{LITESTATS}->do_query($SQL{Insert},@$row);
     }
 
 }
@@ -114,7 +114,7 @@ sub get_list {
     while(<$fh>) {
         next    if(/^\s*$/);    # ignore empty lines
         s/\s+$//;
-        push @list, {id=>$id} if($id);
+        push @list, {id=>$_} if($_);
     }
     $fh->close;
 
