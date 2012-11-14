@@ -31,11 +31,18 @@ my $TESTS = 71;
 # Test Conditions
 
 BEGIN {
+    # load config file
+    my $cfg = Config::IniFiles->new( -file => $config );
+
+    # configure databases
+    my $bucket    = $cfg->val('MAIN','aws_bucket');
+    my $namespace = $cfg->val('MAIN','aws_namespace');
+
     my $meta;
     eval {
         $meta = CPAN::Testers::Metabase::AWS->new(
-            bucket      => 'cpantesters',
-            namespace   => 'beta4',
+            bucket      => $bucket,
+            namespace   => $namespace,
         );
     };
     diag('No AWS key')   unless($meta);
