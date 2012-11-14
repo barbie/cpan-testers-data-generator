@@ -20,7 +20,6 @@ use HTML::Entities;
 use IO::File;
 use JSON;
 use Time::Local;
-use XML::RSS;
 
 use Metabase    0.004;
 use Metabase::Fact;
@@ -94,14 +93,12 @@ sub new {
     }
 
     # command line swtiches override configuration settings
-    for my $key (qw(logfile poll_limit stopfile offset json_file rss_file rss_limit reportlink aws_bucket aws_namespace)) {
+    for my $key (qw(logfile poll_limit stopfile offset aws_bucket aws_namespace)) {
         $self->{$key} = $hash{$key} || $cfg->val('MAIN',$key);
     }
 
     $self->{offset}     ||= 1;
     $self->{poll_limit} ||= 1000;
-    $self->{rss_limit}  ||= 1000;
-    $self->{reportlink} ||= '';
 
     my @rows = $self->{METABASE}->get_query('hash','SELECT * FROM testers_email');
     for my $row (@rows) {
@@ -161,21 +158,14 @@ sub generate {
 
     $self->{reparse} = 0;
 
-    if($self->{json_file} && -f $self->{json_file}) {
-        my $json = read_file($self->{json_file});
-        $self->{reports} = decode_json($json);
-    }
-
 $self->_log("START GENERATE nonstop=$nonstop\n");
 
     do {
         my $start = localtime(time);
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
-        my $limit = int($self->{rss_limit} / 5);
-        $limit = 500;
 
         my $guids = $self->get_next_guids();
-        $self->retrieve_reports($guids,$start,$limit);
+        $self->retrieve_reports($guids,$start);
 
         $nonstop = 0	if($self->{processed} == 0);
         $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
@@ -589,11 +579,7 @@ sub get_next_guids {
 }
 
 sub retrieve_reports {
-    my ($self,$guids,$start,$limit) = @_;
-    $limit ||= 0;
-    my $count = 0;
-
-    my @reports = $self->{reports} ? @{ $self->{reports} } : ();
+    my ($self,$guids,$start) = @_;
 
     if($guids) {
         for my $guid (@$guids) {
@@ -608,8 +594,6 @@ sub retrieve_reports {
                 if($self->store_report()) { 
                     $self->{msg} .= ".. stored";
                     $self->{stored}++; 
-                    unshift @reports, $report;
-                    $count++;
 
                 } else {
                     if($self->{time} gt $self->{report}{updated}) {
@@ -623,19 +607,7 @@ sub retrieve_reports {
             } else {
                 $self->_log(".. FAIL\n");
             }
-
-            if($limit && $count % $limit == 0) {
-                splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
-                #overwrite_file( $self->{rss_file}, $self->_make_rss( \@reports ) )      if($self->{rss_file});
-            }
         }
-    }
-
-    # store recent files
-    if($limit){
-        splice(@reports,0,$self->{rss_limit})   if(scalar(@reports) > $self->{rss_limit});
-        #overwrite_file( $self->{json_file}, $self->_make_json( \@reports ) )    if($self->{json_file});
-        #overwrite_file( $self->{rss_file},  $self->_make_rss(  \@reports ) )    if($self->{rss_file});
     }
 
     $self->commit();
@@ -1244,52 +1216,6 @@ sub _send_email {
     }
 }
 
-sub _make_json {
-    my ( $self, $data ) = @_;
-    return encode_json( $data );
-}
-
-sub _make_rss {
-    my ( $self, $data ) = @_;
-
-    my $title = "Recent CPAN Testers Reports";
-    my $link  = "http://www.cpantesters.org/static/recent.html";
-    my $desc  = "Recent CPAN Testers reports";
-
-    my @date = $data->[0]->{fulldate} =~ /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/;
-    my $date = sprintf "%04d-%02d-%02dT%02d:%02d+01:00", @date;
-
-    my $rss = XML::RSS->new( version => '1.0' );
-    $rss->channel(
-        title       => $title,
-        link        => $link,
-        description => $desc,
-        syn         => {
-            updatePeriod    => "daily",
-            updateFrequency => "1",
-            updateBase      => "1901-01-01T00:00+00:00",
-        },
-        dc          => {
-            date            => $date,
-            subject         => $desc,
-            creator         => 'barbie@cpantesters.org',
-            publisher       => 'barbie@cpantesters.org',
-            rights          => 'Copyright ' . $date[0] . ', CPAN Testers',
-            language        => 'en-gb'
-        }
-    );
-
-    for my $test (@$data) {
-        my @fields = map {$test->{$_} || ''} qw( status dist version perl osname osvers platform );
-        $rss->add_item(
-            title => sprintf( "%s %s-%s %s on %s %s (%s)", @fields ),
-            link  => "$self->{reportlink}/" . ($test->{guid} || $test->{id}),
-        );
-    }
-
-    return $rss->as_string;
-}
-
 sub _date_diff {
     my ($date1,$date2) = @_;
 
@@ -1540,7 +1466,7 @@ cached report.
 =item * retrieve_reports
 
 Abstracted loop of requesting GUIDs, then parsing, storing and caching each 
-report as appropriate. Updates Recent JSON & RSS files.
+report as appropriate.
 
 =item * already_saved
 

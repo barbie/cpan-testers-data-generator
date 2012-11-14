@@ -44,8 +44,7 @@
                 "JSON": "0",
                 "Metabase": "0.014",
                 "Metabase::Fact": "0",
-                "Time::Local": "0",
-                "XML::Feed": "0"
+                "Time::Local": "0"
             }
         },
         "test" : {

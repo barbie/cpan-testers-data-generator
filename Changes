@@ -1,5 +1,7 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+	- removed JSON & RSS Recent code.
+
 1.05    2012-11-13
 	- parse message fix.
 	- disabled SQLite updates.

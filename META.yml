@@ -32,7 +32,6 @@ requires:
   Metabase:                           0.014
   Metabase::Fact:                     0
   Time::Local:                        0
-  XML::Feed:                          0
 recommends:
   Test::CPAN::Meta:                   0
   Test::CPAN::Meta::JSON:             0

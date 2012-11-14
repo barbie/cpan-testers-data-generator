@@ -32,7 +32,6 @@ WriteMakefile(
         'Metabase'                          => 0.014,
         'Metabase::Fact'                    => 0,
         'Time::Local'                       => 0,
-        'XML::Feed'                         => 0,
 
         'DBI'                               => 0,
         'DBD::mysql'                        => 0,
