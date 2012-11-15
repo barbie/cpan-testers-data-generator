@@ -1253,8 +1253,7 @@ CPAN::Testers::Data::Generator - Download and summarize CPAN Testers data
 
   % cpanstats
   # ... wait patiently, very patiently
-  # ... then use cpanstats.db, an SQLite database
-  # ... or the MySQL database
+  # ... then use the cpanstats MySQL database
 
 =head1 DESCRIPTION
 
@@ -1264,64 +1263,78 @@ rewritten to use the CPAN Testers Statistics database generation code. This
 now means that all the CPAN Testers sites including the Reports site, the
 Statistics site and the CPAN Dependencies site, can use the same database.
 
-This module downloads articles from the cpan-testers newsgroup, generating or
-updating an SQLite database containing all the most important information. You
-can then query this database, or use CPAN::WWW::Testers to present it over the
-web.
+This module retrieves and parses reports from the Metabase, generating or
+updating entries in the cpanstats database, which extracts specific metadata
+from the reports. The information in the cpanstats database is then presented
+via CPAN::Testers::WWW::Reports on the CPAN Testers Reports website.
 
-A good example query for Acme-Colour would be:
+A good example query from the cpanstats database for Acme-Colour would be:
 
   SELECT version, status, count(*) FROM cpanstats WHERE
-  distribution = "Acme-Colour" group by version, state;
+  dist = "Acme-Colour" group by version, state;
 
 To create a database from scratch can take several days, as there are now over
-2 million articles in the newgroup. As such updating from a known copy of the
+24 million submitted reports. As such updating from a known copy of the
 database is much more advisable. If you don't want to generate the database
-yourself, you can obtain the latest official copy (compressed with gzip) at
-http://devel.cpantesters.org/cpanstats.db.gz
+yourself, you can obtain a feed using CPAN::Testers::WWW::Report::Query::Reports.
 
-With over 6 million articles in the archive, if you do plan to run this
+With over 24 million reports in the database, if you do plan to run this
 software to generate the databases it is recommended you utilise a high-end
-processor machine. Even with a reasonable processor it can take a week!
+processor machine. Even with a reasonable processor it can take over a week!
 
-=head1 SQLite DATABASE SCHEMA
+=head1 DATABASE SCHEMA
 
 The cpanstats database schema is very straightforward, one main table with
 several index tables to speed up searches. The main table is as below:
 
-  +--------------------------------+
-  | cpanstats                      |
-  +----------+---------------------+
-  | id       | INTEGER PRIMARY KEY |
-  | state    | TEXT                |
-  | postdate | TEXT                |
-  | tester   | TEXT                |
-  | dist     | TEXT                |
-  | version  | TEXT                |
-  | platform | TEXT                |
-  | perl     | TEXT                |
-  | osname   | TEXT                |
-  | osvers   | TEXT                |
-  | date     | TEXT                |
-  | guid     | TEXT                |
-  | type     | INTEGER             |
-  +----------+---------------------+
+  CREATE TABLE `cpanstats` (
+
+    `id`          int(10) unsigned    NOT NULL AUTO_INCREMENT,
+    `guid`        char(36)            NOT NULL DEFAULT '',
+    `state`       varchar(32)         DEFAULT NULL,
+    `postdate`    varchar(8)          DEFAULT NULL,
+    `tester`      varchar(255)        DEFAULT NULL,
+    `dist`        varchar(255)        DEFAULT NULL,
+    `version`     varchar(255)        DEFAULT NULL,
+    `platform`    varchar(255)        DEFAULT NULL,
+    `perl`        varchar(255)        DEFAULT NULL,
+    `osname`      varchar(255)        DEFAULT NULL,
+    `osvers`      varchar(255)        DEFAULT NULL,
+    `fulldate`    varchar(32)         DEFAULT NULL,
+    `type`        int(2)              DEFAULT '0',
+      
+    PRIMARY KEY       (`id`),
+    KEY `guid`        (`guid`),
+    KEY `distvers`    (`dist`,`version`),
+    KEY `tester`      (`tester`),
+    KEY `state`       (`state`),
+    KEY `postdate`    (`postdate`)
+  
+  )
 
 It should be noted that 'postdate' refers to the YYYYMM formatted date, whereas
-the 'date' field refers to the YYYYMMDDhhmm formatted date and time.
+the 'fulldate' field refers to the YYYYMMDDhhmm formatted date and time.
 
 The metabase database schema is again very straightforward, and consists of one
-table, as below:
+main table, as below:
 
-  +--------------------------------+
-  | metabase                       |
-  +----------+---------------------+
-  | guid     | TEXT PRIMARY KEY    |
-  | report   | TEXT                |
-  +----------+---------------------+
+  CREATE TABLE `metabase` (
+  
+    `guid`      char(36)            NOT NULL,
+    `id`        int(10) unsigned    NOT NULL,
+    `updated`   varchar(32)         DEFAULT NULL,
+    `report`    longblob            NOT NULL,
+  
+    PRIMARY KEY     (`guid`),
+    KEY `id`        (`id`),
+    KEY `updated`   (`updated`)
+  
+  )
 
 The report field is JSON encoded, and is a cached version of the one extracted
 from Metabase::Librarian.
+
+See F<examples/cpanstats-createdb> for the full list of tables used.
 
 =head1 SIGNIFICANT CHANGES
 
@@ -1346,7 +1359,8 @@ new distribution CPAN-Testers-Common-DBUtils.
 
 In the next stage of development of CPAN Testers 2.0, the id field used within
 the database schema above for the cpanstats table no longer matches the NNTP
-ID value, although the id in the articles does still reference the NNTP ID.
+ID value, although the id in the articles does still reference the NNTP ID, at
+least for the reports submitted prior to the switch to the Metabase in 2010.
 
 In order to correctly reference the id in the articles table, you will need to
 use the function guid_to_nntp() with CPAN::Testers::Common::Utils, using the
@@ -1537,9 +1551,9 @@ Saves any new Perl versions
 
 =head1 HISTORY
 
-The CPAN testers was conceived back in May 1998 by Graham Barr and Chris
+The CPAN Testers was conceived back in May 1998 by Graham Barr and Chris
 Nandor as a way to provide multi-platform testing for modules. Today there
-are over 2 million tester reports and more than 100 testers each month
+are over 24 million tester reports and more than 100 testers each month
 giving valuable feedback for users and authors alike.
 
 =head1 BECOME A TESTER
