@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.05';
+$VERSION = '1.06';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -1223,6 +1223,9 @@ sub _date_diff {
     my (@dt2) = $date2 =~ /(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)Z/;
 
     return -1 unless(@dt1 && @dt2);
+
+    $dt1[1]--;
+    $dt2[1]--;
 
     my $dt1 = timelocal(reverse @dt1);
     my $dt2 = timelocal(reverse @dt2);
