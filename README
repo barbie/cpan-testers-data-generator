@@ -1,303 +1,88 @@
-CPAN::Testers::Data::Generator(3)            CPAN::Testers::Data::Generator(3)
-
-
-
-NAME
-       CPAN::Testers::Data::Generator - Download and summarize CPAN Testers
-       data
-
-SYNOPSIS
-         % cpanstats
-         # ... wait patiently, very patiently
-         # ... then use cpanstats.db, an SQLite database
-         # ... or the MySQL database
-
-DESCRIPTION
-       This distribution was originally written by Leon Brocard to download
-       and summarize CPAN Testers data. However, all of the original code has
-       been rewritten to use the CPAN Testers Statistics database generation
-       code. This now means that all the CPAN Testers sites including the
-       Reports site, the Statistics site and the CPAN Dependencies site, can
-       use the same database.
-
-       This module downloads articles from the cpan-testers newsgroup,
-       generating or updating an SQLite database containing all the most
-       important information. You can then query this database, or use
-       CPAN::WWW::Testers to present it over the web.
-
-       A good example query for Acme-Colour would be:
-
-         SELECT version, status, count(*) FROM cpanstats WHERE
-         distribution = "Acme-Colour" group by version, state;
-
-       To create a database from scratch can take several days, as there are
-       now over 2 million articles in the newgroup. As such updating from a
-       known copy of the database is much more advisable. If you don't want to
-       generate the database yourself, you can obtain the latest official copy
-       (compressed with gzip) at http://devel.cpantesters.org/cpanstats.db.gz
-
-       With over 6 million articles in the archive, if you do plan to run this
-       software to generate the databases it is recommended you utilise a
-       high-end processor machine. Even with a reasonable processor it can
-       take a week!
-
-SQLite DATABASE SCHEMA
-       The cpanstats database schema is very straightforward, one main table
-       with several index tables to speed up searches. The main table is as
-       below:
-
-         +--------------------------------+
-         | cpanstats                      |
-         +----------+---------------------+
-         | id       | INTEGER PRIMARY KEY |
-         | state    | TEXT                |
-         | postdate | TEXT                |
-         | tester   | TEXT                |
-         | dist     | TEXT                |
-         | version  | TEXT                |
-         | platform | TEXT                |
-         | perl     | TEXT                |
-         | osname   | TEXT                |
-         | osvers   | TEXT                |
-         | date     | TEXT                |
-         | guid     | TEXT                |
-         | type     | INTEGER             |
-         +----------+---------------------+
-
-       It should be noted that 'postdate' refers to the YYYYMM formatted date,
-       whereas the 'date' field refers to the YYYYMMDDhhmm formatted date and
-       time.
-
-       The metabase database schema is again very straightforward, and
-       consists of one table, as below:
-
-         +--------------------------------+
-         | metabase                       |
-         +----------+---------------------+
-         | guid     | TEXT PRIMARY KEY    |
-         | report   | TEXT                |
-         +----------+---------------------+
-
-       The report field is JSON encoded, and is a cached version of the one
-       extracted from Metabase::Librarian.
-
-SIGNIFICANT CHANGES
-   v0.31 CHANGES
-       With the release of v0.31, a number of changes to the codebase were
-       made as a further move towards CPAN Testers 2.0. The first change is
-       the name for this distribution. Now titled
-       'CPAN-Testers-Data-Generator', this now fits more appropriately within
-       the CPAN-Testers namespace on CPAN.
-
-       The second significant change is to now reference a MySQL cpanstats
-       database.  The SQLite version is still updated as before, as a number
-       of other websites and toolsets still rely on that database file format.
-       However, in order to make the CPAN Testers Reports website more
-       dynamic, an SQLite database is not really appropriate for a high demand
-       website.
-
-       The database creation code is now available as a standalone program, in
-       the examples directory, and all the database communication is now
-       handled by the new distribution CPAN-Testers-Common-DBUtils.
-
-   v0.41 CHANGES
-       In the next stage of development of CPAN Testers 2.0, the id field used
-       within the database schema above for the cpanstats table no longer
-       matches the NNTP ID value, although the id in the articles does still
-       reference the NNTP ID.
-
-       In order to correctly reference the id in the articles table, you will
-       need to use the function guid_to_nntp() with
-       CPAN::Testers::Common::Utils, using the new guid field in the cpanstats
-       table.
-
-       As of this release the cpanstats id field is a unique auto incrementing
-       field.
-
-       The next release of this distribution will be focused on generation of
-       stats using the Metabase storage API.
-
-   v1.00 CHANGES
-       Moved to Metabase API. The change to a definite major version number
-       hopefully indicates that this is a major interface change. All previous
-       NNTP access has been dropped and is no longer relavent. All report
-       updates are now fed from the Metabase API.
-
-INTERFACE
-   The Constructor
-       ·   new
-
-           Instatiates the object CPAN::Testers::Data::Generator. Accepts a
-           hash containing values to prepare the object. These are described
-           as:
-
-             my $obj = CPAN::Testers::Data::Generator->new(
-                           logfile => './here/logfile',
-                           config  => './here/config.ini'
-             );
-
-           Where 'logfile' is the location to write log messages. Log messages
-           are only written if a logfile entry is specified, and will always
-           append to any existing file. The 'config' should contain the path
-           to the configuration file, used to define the database access and
-           general operation settings.
-
-   Public Methods
-       ·   generate
-
-           Starting from the last cached report, retrieves all the more recent
-           reports from the Metabase Report Submission server, parsing each
-           and recording each report in both the cpanstats databases (MySQL &
-           SQLite) and the metabase cache database.
-
-       ·   regenerate
-
-           For a given date range, retrieves all the reports from the Metabase
-           Report Submission server, parsing each and recording each report in
-           both the cpanstats databases (MySQL & SQLite) and the metabase
-           cache database.
-
-           Note that as only 2500 can be returned at any one time due to
-           Amazon SimpleDB restrictions, this method will only process the
-           guids returned from a given start data, up to a maxiumu of 2500
-           guids.
-
-           This methog will return the guid of the last report processed.
-
-       ·   rebuild
-
-           In the event that the cpanstats database needs regenerating, either
-           in part or for the whole database, this method allow you to do so.
-           You may supply parameters as to the 'start' and 'end' values
-           (inclusive), where all records are assumed by default. Records are
-           rebuilt using the local metabase cache database.
-
-       ·   reparse
-
-           Rather than a complete rebuild the option to selective reparse
-           selected entries is useful if there are reports which were
-           previously unable to correctly supply a particular field, which now
-           has supporting parsing code within the codebase.
-
-           In addition there is the option to exclude fields from parsing
-           checks, where they may be corrupted, and can be later amended using
-           the 'cpanstats-update' tool.
-
-   Private Methods
-       ·   commit
-
-           To speed up the transaction process, a commit is performed every
-           500 inserts.  This method is used as part of the clean up process
-           to ensure all transactions are completed.
-
-       ·   get_next_guids
-
-           Get the list of GUIDs for the reports that have been submitted
-           since the last cached report.
-
-       ·   already_saved
-
-           Given a guid, determines whether it has already been saved in the
-           local metabase cache.
-
-       ·   get_fact
-
-           Get a specific report factfor a given GUID.
-
-       ·   parse_report
-
-           Parses a report extracting the metadata required for the cpanstats
-           database.
-
-       ·   reparse_report
-
-           Parses a report (from a local metabase cache) extracting the
-           metadata required for the stats database.
-
-       ·   retrieve_report
-
-           Given a guid will attempt to return the report metadata from the
-           cpanstats database.
-
-       ·   store_report
-
-           Inserts the components of a parsed report into the cpanstats
-           database.
-
-       ·   cache_report
-
-           Inserts a serialised report into a local metabase cache database.
-
-       ·   cache_update
-
-           For the current report will update the local metabase cache with
-           the id used within the cpanstats database.
-
-HISTORY
-       The CPAN testers was conceived back in May 1998 by Graham Barr and
-       Chris Nandor as a way to provide multi-platform testing for modules.
-       Today there are over 2 million tester reports and more than 100 testers
-       each month giving valuable feedback for users and authors alike.
-
-BECOME A TESTER
-       Whether you have a common platform or a very unusual one, you can help
-       by testing modules you install and submitting reports. There are plenty
-       of module authors who could use test reports and helpful feedback on
-       their modules and distributions.
-
-       If you'd like to get involved, please take a look at the CPAN Testers
-       Wiki, where you can learn how to install and configure one of the
-       recommended smoke tools.
-
-       For further help and advice, please subscribe to the the CPAN Testers
-       discussion mailing list.
-
-         CPAN Testers Wiki
-           - http://wiki.cpantesters.org
-         CPAN Testers Discuss mailing list
-           - http://lists.cpan.org/showlist.cgi?name=cpan-testers-discuss
+CPAN-Testers-Data-Generator
+===========================
+
+This distribution downloads and summarizes the CPAN Testers metadata from the
+Metabase.
+
+DEPENDENCIES
+
+The distribution requires the following modules:
+
+  Config::IniFiles
+  CPAN::Testers::Common::Article
+  CPAN::Testers::Common::DBUtils
+  CPAN::Testers::Fact::LegacyReport
+  CPAN::Testers::Fact::TestSummary
+  CPAN::Testers::Metabase::AWS
+  CPAN::Testers::Report
+  File::Basename
+  File::Path
+  File::Slurp
+  HTML::Entities
+  IO::File
+  JSON
+  Metabase
+  Metabase::Fact
+  Time::Local
+
+  # underlying Database requirements
+  DBI
+  DBD::mysql
+  DBD::SQLite
+  
+  # used by run scripts
+  Getopt::Long
+  Getopt::ArgvFile
+
+
+INSTALLATION
+
+To install this module, untar the tarball into the directory of choice then
+type the following on the command line (substitute make with nmake or dmake
+if appropriate):
+
+  perl Makefile.PL
+  make
+  make test
+  make install
+
+Alternatively you may wish to use the CPAN.pm shell or CPANPLUS shell as your
+installer, which will automatically detect uninstalled prerequisities and 
+install those too for you.
 
 BUGS, PATCHES & FIXES
-       There are no known bugs at the time of this release. However, if you
-       spot a bug or are experiencing difficulties, that is not explained
-       within the POD documentation, please send bug reports and patches to
-       the RT Queue (see below).
 
-       Fixes are dependent upon their severity and my availability. Should a
-       fix not be forthcoming, please feel free to (politely) remind me.
+There are no known bugs at the time of this release. However, if you spot a
+bug or are experiencing difficulties that are not explained within the POD
+documentation, please submit a bug to the RT system (see link below). However,
+it would help greatly if you are able to pinpoint problems or even supply a 
+patch. 
 
-       RT Queue -
-       http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
+Fixes are dependent upon their severity and my availability. Should a fix not
+be forthcoming, please feel free to (politely) remind me by sending an email
+to barbie@cpan.org .
 
-SEE ALSO
-       CPAN::Testers::Report, Metabase, Metabase::Fact,
-       CPAN::Testers::Fact::LegacyReport, CPAN::Testers::Fact::TestSummary,
-       CPAN::Testers::Metabase::AWS
-
-       CPAN::Testers::WWW::Statistics
-
-       http://www.cpantesters.org/, http://stats.cpantesters.org/,
-       http://wiki.cpantesters.org/
+RT: http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Testers-Data-Generator
 
 AUTHOR
-       It should be noted that the original code for this distribution began
-       life under another name. The original distribution generated data for
-       the original CPAN Testers website. However, in 2008 the code was
-       reworked to generate data in the format for the statistics data
-       analysis, which in turn was reworked to drive the redesign of the all
-       the CPAN Testers websites. To reflect the code changes, a new name was
-       given to the distribution.
+  It should be noted that the original code for this distribution began
+  life under another name. The original distribution generated data for
+  the original CPAN Testers website. However, in 2008 the code was
+  reworked to generate data in the format for the statistics data
+  analysis, which in turn was reworked to drive the redesign of the all
+  the CPAN Testers websites. To reflect the code changes, a new name was
+  given to the distribution.
 
-   CPAN-WWW-Testers-Generator
-         Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
-         Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2010
+  CPAN-WWW-Testers-Generator
+    Original author:    Leon Brocard <acme@astray.com>   (C) 2002-2008
+    Current maintainer: Barbie       <barbie@cpan.org>   (C) 2008-2010
 
-   CPAN-Testers-Data-Generator
-         Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2011
+  CPAN-Testers-Data-Generator
+    Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2011
 
-LICENSE
-       This code is distributed under the Artistic License 2.0.
+COPYRIGHT AND LICENSE
 
+  Copyright (C) 2008-2012 Barbie for Miss Barbell Productions
 
-
-perl v5.10.1                      2011-07-04 CPAN::Testers::Data::Generator(3)
+  This module is free software; you can redistribute it and/or
+  modify it under the Artistic Licence v2.
