@@ -13,6 +13,8 @@ use Config::IniFiles;
 use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
 #use Data::Dumper;
+use DateTime;
+use DateTime::Duration;
 use File::Basename;
 use File::Path;
 use File::Slurp;
@@ -31,7 +33,8 @@ use CPAN::Testers::Report;
 #----------------------------------------------------------------------------
 # Variables
 
-my $DIFF = 60;  # difference check in seconds
+my $DIFF = 30;          # max difference allowed in seconds
+my $MINS = 15;          # split time in minutes
 
 my %testers;
 
@@ -164,6 +167,37 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
         my $start = localtime(time);
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
+        my @date = localtime(time);
+        my $maxdate = sprintf '%04d-%02d-%02dT00:00:00Z', $date[5]+1900, $date[4]+1,$date[3];
+
+        my $data = $self->get_next_dates($maxdate);
+    
+        $self->_consume_reports( $maxdate, $data );
+
+        $nonstop = 0	if($self->{processed} == 0);
+        $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
+
+        $self->load_uploads()	if($nonstop);
+        $self->load_authors()	if($nonstop);
+
+$self->_log("CHECK nonstop=$nonstop\n");
+    } while($nonstop);
+$self->_log("STOP GENERATE nonstop=$nonstop\n");
+}
+
+sub _generate_old {
+    my $self    = shift;
+    my $nonstop = shift || 0;
+    my @reports;
+
+    $self->{reparse} = 0;
+
+$self->_log("START GENERATE nonstop=$nonstop\n");
+
+    do {
+        my $start = localtime(time);
+        ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
+
         my $guids = $self->get_next_guids();
         $self->retrieve_reports($guids,$start);
 
@@ -186,7 +220,7 @@ sub regenerate {
     my @date = localtime(time);
     my $maxdate = sprintf '%04d-%02d-%02dT00:00:00Z', $date[5]+1900, $date[4]+1,$date[3];
 
-$self->_log("START REGENERATE\n");
+    $self->_log("START REGENERATE\n");
 
     my @data;
     if($hash->{file}) {
@@ -207,97 +241,9 @@ $self->_log("START REGENERATE\n");
                         dstart => $hash->{dstart}, dend => $hash->{dend} };
     }
 
-    for my $data (@data) {
-        my $start = $self->_get_createdate( $data->{gstart}, $data->{dstart} );
-        my $end   = $self->_get_createdate( $data->{gend},   $data->{dend} );
+    $self->_consume_reports( $maxdate, \@data );
 
-        unless($start && $end) {
-$self->_log("BAD DATES: start=$start, end=$end [missing dates]\n");
-            next;
-        }
-        if($start ge $end) {
-$self->_log("BAD DATES: start=$start, end=$end [end before start]\n");
-            next;
-        }
-        if($end gt $maxdate) {
-$self->_log("BAD DATES: start=$start, end=$end [exceeds $maxdate]\n");
-            next;
-        }
-
-$self->_log("start=$start, end=$end\n");
-
-        ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
-
-        # what guids do we already have?
-        my $sql =   'SELECT guid FROM metabase WHERE updated >= ? AND updated <= ? ORDER BY updated asc';
-        my @guids = $self->{METABASE}->get_query('hash',$sql,$data->{dstart},$data->{dend});
-        my %guids = map {$_->{guid} => 1} @guids;
-
-        # note that because Amazon's SimpleDB can return odd entries out of 
-        # sync, we have to look at previous entries to ensure we are starting
-        # from the right point
-        my ($update,$prev,$last) = ($start,$start,$start);
-        my @times = ($start);
-
-        while($update le $end && $prev le $end) {
-            # get list of guids from given start date
-            my $guids = $self->get_next_guids($start);
-
-            if($guids) {
-                @guids = grep { !$guids{$_} } @$guids;
-                for my $guid (@guids) {
-                    $self->_log("GUID [$guid]");
-
-                    $self->{processed}++;
-
-                    if($self->already_saved($guid)) {
-                        $self->_log(".. already saved\n");
-                        next;
-                    }
-
-                    if(my $report = $self->get_fact($guid)) {
-                        $update = $report->{metadata}{core}{update_time};
-                        $self->{report}{guid}   = $guid;
-                        next    if($self->parse_report(report => $report)); # true if invalid report
-
-                        if($self->store_report()) { $self->_log(".. stored"); $self->{stored}++;    }
-                        else                      { $self->_log(".. already stored");       }
-                        if($self->cache_report()) { $self->_log(".. cached\n"); $self->{cached}++;  }
-                        else                      { $self->_log(".. bad cache data\n");     }
-                    } else {
-                        $self->_log(".. FAIL\n");
-                    }
-
-                    shift @times    if(@times > 4); # one off
-                    push @times, $update;           # one on ... max 5
-
-                    my $times = 0;
-                    for my $time (@times) {
-                        next    if(_date_diff($end,$time) <= 0);
-                        $times++;
-                    }
-
-                    last    if($times == @times);   # stop if all past endh
-
-#                    last    if($update gt $end && $last gt $end);
-#                    $prev = $last;
-#                    $last = $update;
-                }
-            }
-
-            $self->commit();
-        }
-
-        $self->commit();
-        my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
-        my $stop = localtime(time);
-        $self->_log("MARKER: processed=$self->{processed}, stored=$self->{stored}, cached=$self->{cached}, invalid=$invalid, start=$start, stop=$stop\n");
-    }
-
-    # only email invalid reports during the generate process
-    $self->_send_email()    if($self->{invalid});
-
-$self->_log("STOP REGENERATE\n");
+    $self->_log("STOP REGENERATE\n");
 }
 
 sub rebuild {
@@ -499,7 +445,7 @@ $self->_log("STOP TAIL\n");
 }
 
 #----------------------------------------------------------------------------
-# Private Methods
+# Internal Methods
 
 sub commit {
     my $self = shift;
@@ -526,6 +472,43 @@ sub get_tail_guids {
     $self->_log("Retrieved ".($guids ? scalar(@$guids) : 0)." guids\n");
 
     return $guids;
+}
+
+sub get_next_dates {
+    my ($self,$to) = @_;
+    my @data;
+
+    my $from;
+    my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase ORDER BY updated DESC LIMIT 5');
+    for my $row (@rows) {
+        if($from) {
+            my $diff = _date_diff($from,$row->[0]);
+            next if($diff < $DIFF);
+        }
+
+        $from = $row->[0];
+    }
+
+    $from ||= '1999-01-01T00:00:00Z';
+
+    while($from lt $to) {
+        my @from = $from =~ /(\d+)\-(\d+)\-(\d+)T(\d+):(\d+):(\d+)/;
+        my $dt = DateTime->new(
+            year => $from[0], month => $from[1], day => $from[2],
+            hour => $from[3], minute => $from[4], second => $from[5],
+        );
+        $dt->add( DateTime::Duration->new( minutes => $MINS ) );
+        my $split = sprintf "%sT%sZ", $dt->ymd, $dt->hms;
+        if($split lt $to) {
+            push @data, { dstart => $from, dend => $split };
+        } else {
+            push @data, { dstart => $from, dend => $to };
+        }
+
+        $from = $split;
+    }
+
+    return \@data;
 }
 
 sub get_next_guids {
@@ -960,7 +943,7 @@ sub cache_update {
 }
 
 #----------------------------------------------------------------------------
-# Private Functions
+# Internal Cache Methods
 
 sub load_uploads {
     my $self = shift;
@@ -1002,6 +985,103 @@ sub save_perl_versions {
         $self->{CPANSTATS}->do_query("INSERT INTO perl_version (version,perl,patch,devel) VALUES (?,?,?,?)",
 		$vers, $self->{perls}{$vers}{perl}, $self->{perls}{$vers}{patch}, $self->{perls}{$vers}{devel});
     }
+}
+
+#----------------------------------------------------------------------------
+# Private Methods
+
+sub _consume_reports {
+    my ($self,$maxdate,$dataset) = @_;
+
+    for my $data (@$dataset) {
+        my $start = $self->_get_createdate( $data->{gstart}, $data->{dstart} );
+        my $end   = $self->_get_createdate( $data->{gend},   $data->{dend} );
+
+        unless($start && $end) {
+            $self->_log("BAD DATES: start=$start, end=$end [missing dates]\n");
+            next;
+        }
+        if($start ge $end) {
+            $self->_log("BAD DATES: start=$start, end=$end [end before start]\n");
+            next;
+        }
+        if($end gt $maxdate) {
+            $self->_log("BAD DATES: start=$start, end=$end [exceeds $maxdate]\n");
+            next;
+        }
+
+        $self->_log("start=$start, end=$end\n");
+
+        ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
+
+        # what guids do we already have?
+        my $sql =   'SELECT guid FROM metabase WHERE updated >= ? AND updated <= ? ORDER BY updated asc';
+        my @guids = $self->{METABASE}->get_query('hash',$sql,$data->{dstart},$data->{dend});
+        my %guids = map {$_->{guid} => 1} @guids;
+
+        # note that because Amazon's SimpleDB can return odd entries out of 
+        # sync, we have to look at previous entries to ensure we are starting
+        # from the right point
+        my ($update,$prev,$last) = ($start,$start,$start);
+        my @times = ($start);
+
+        while($update le $end && $prev le $end) {
+            # get list of guids from given start date
+            my $guids = $self->get_next_guids($start);
+
+            if($guids) {
+                @guids = grep { !$guids{$_} } @$guids;
+                for my $guid (@guids) {
+                    $self->_log("GUID [$guid]");
+
+                    $self->{processed}++;
+
+                    if($self->already_saved($guid)) {
+                        $self->_log(".. already saved\n");
+                        next;
+                    }
+
+                    if(my $report = $self->get_fact($guid)) {
+                        $update = $report->{metadata}{core}{update_time};
+                        $self->{report}{guid}   = $guid;
+                        next    if($self->parse_report(report => $report)); # true if invalid report
+
+                        if($self->store_report()) { $self->_log(".. stored"); $self->{stored}++;    }
+                        else                      { $self->_log(".. already stored");       }
+                        if($self->cache_report()) { $self->_log(".. cached\n"); $self->{cached}++;  }
+                        else                      { $self->_log(".. bad cache data\n");     }
+                    } else {
+                        $self->_log(".. FAIL\n");
+                    }
+
+                    shift @times    if(@times > 4); # one off
+                    push @times, $update;           # one on ... max 5
+
+                    my $times = 0;
+                    for my $time (@times) {
+                        next    if(_date_diff($end,$time) <= 0);
+                        $times++;
+                    }
+
+                    last    if($times == @times);   # stop if all past endh
+
+#                    last    if($update gt $end && $last gt $end);
+#                    $prev = $last;
+#                    $last = $update;
+                }
+            }
+
+            $self->commit();
+        }
+
+        $self->commit();
+        my $invalid = $self->{invalid} ? scalar(@{$self->{invalid}}) : 0;
+        my $stop = localtime(time);
+        $self->_log("MARKER: processed=$self->{processed}, stored=$self->{stored}, cached=$self->{cached}, invalid=$invalid, start=$start, stop=$stop\n");
+    }
+
+    # only email invalid reports during the generate process
+    $self->_send_email()    if($self->{invalid});
 }
 
 sub _get_perl_version {
@@ -1474,6 +1554,10 @@ are completed.
 =item * get_tail_guids
 
 Get the list of GUIDs as would be seen for a tail log.
+
+=item * get_next_dates
+
+Get the list of dates to use in the next cycle of report retrieval.
 
 =item * get_next_guids
 

@@ -23,6 +23,8 @@ WriteMakefile(
         'CPAN::Testers::Fact::TestSummary'  => 0,
         'CPAN::Testers::Metabase::AWS'      => 0,
         'CPAN::Testers::Report'             => 0,
+        'DateTime'                          => 0,
+        'DateTime::Duration'                => 0,
         'File::Basename'                    => 0,
         'File::Path'                        => 0,
         'File::Slurp'                       => 0,

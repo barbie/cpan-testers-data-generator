@@ -31,6 +31,8 @@
                 "CPAN::Testers::Fact::TestSummary": "0",
                 "CPAN::Testers::Metabase::AWS": "0",
                 "CPAN::Testers::Report": "0",
+                "DateTime": "0",
+                "DateTime::Duration": "0",
                 "DBI": "0",
                 "DBD::mysql": "0",
                 "DBD::SQLite": "1.07",
