@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.07';
+$VERSION = '1.08';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -604,8 +604,8 @@ sub retrieve_reports {
 
 sub already_saved {
     my ($self,$guid) = @_;
-    my @rows = $self->{METABASE}->get_query('array','SELECT id FROM metabase WHERE guid=?',$guid);
-    return 1	if(@rows);
+    my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase WHERE guid=?',$guid);
+    return $rows[0]->[0]	if(@rows);
     return 0;
 }
 
@@ -1025,7 +1025,9 @@ sub _consume_reports {
         my ($update,$prev,$last) = ($start,$start,$start);
         my @times = ($start);
 
-        while($update le $end && $prev le $end) {
+        while($update le $end || $prev le $end) {
+            $prev = $update;
+
             # get list of guids from given start date
             my $guids = $self->get_next_guids($start);
 
@@ -1036,8 +1038,9 @@ sub _consume_reports {
 
                     $self->{processed}++;
 
-                    if($self->already_saved($guid)) {
+                    if(my $time = $self->already_saved($guid)) {
                         $self->_log(".. already saved\n");
+                        $update = $time;
                         next;
                     }
 
