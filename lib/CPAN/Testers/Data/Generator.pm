@@ -1034,16 +1034,12 @@ sub _consume_reports {
             @guids = grep { !$guids{$_} } @$guids;
             for my $guid (@guids) {
                 # don't process too far
-                shift @times    if(@times > 4); # one off
-                push @times, $update;           # one on ... max 5
+                shift @times    if(@times > 9);                     # one off
+                push @times, _date_diff($end,$update) <= 0 ? 0 : 1; # one on ... max 10
 
                 my $times = 0;
-                for my $time (@times) {
-                    next    if(_date_diff($end,$time) <= 0);
-                    $times++;
-                }
-
-                last    if($times == @times);   # stop if all past endh
+                $times += $_    for(@times);
+                last    if($times == 10);                           # stop if all greater than end
 
                 # okay process
                 $self->_log("GUID [$guid]");
