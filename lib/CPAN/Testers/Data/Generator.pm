@@ -1023,54 +1023,50 @@ sub _consume_reports {
         # sync, we have to look at previous entries to ensure we are starting
         # from the right point
         my ($update,$prev,$last) = ($start,$start,$start);
-        my @times = ($start);
+        my @times = ();
 
-        while($update le $end || $prev le $end) {
-            $prev = $update;
+        while($update le $end) {
 
-            # get list of guids from given start date
-            my $guids = $self->get_next_guids($start);
+            # get list of guids from last update date
+            my $guids = $self->get_next_guids($update);
+            last    unless($guids);
 
-            if($guids) {
-                @guids = grep { !$guids{$_} } @$guids;
-                for my $guid (@guids) {
-                    $self->_log("GUID [$guid]");
+            @guids = grep { !$guids{$_} } @$guids;
+            for my $guid (@guids) {
+                # don't process too far
+                shift @times    if(@times > 4); # one off
+                push @times, $update;           # one on ... max 5
 
-                    $self->{processed}++;
+                my $times = 0;
+                for my $time (@times) {
+                    next    if(_date_diff($end,$time) <= 0);
+                    $times++;
+                }
 
-                    if(my $time = $self->already_saved($guid)) {
-                        $self->_log(".. already saved\n");
-                        $update = $time;
-                        next;
-                    }
+                last    if($times == @times);   # stop if all past endh
 
-                    if(my $report = $self->get_fact($guid)) {
-                        $update = $report->{metadata}{core}{update_time};
-                        $self->{report}{guid}   = $guid;
-                        next    if($self->parse_report(report => $report)); # true if invalid report
+                # okay process
+                $self->_log("GUID [$guid]");
 
-                        if($self->store_report()) { $self->_log(".. stored"); $self->{stored}++;    }
-                        else                      { $self->_log(".. already stored");       }
-                        if($self->cache_report()) { $self->_log(".. cached\n"); $self->{cached}++;  }
-                        else                      { $self->_log(".. bad cache data\n");     }
-                    } else {
-                        $self->_log(".. FAIL\n");
-                    }
+                $self->{processed}++;
 
-                    shift @times    if(@times > 4); # one off
-                    push @times, $update;           # one on ... max 5
+                if(my $time = $self->already_saved($guid)) {
+                    $self->_log(".. already saved\n");
+                    $update = $time;
+                    next;
+                }
 
-                    my $times = 0;
-                    for my $time (@times) {
-                        next    if(_date_diff($end,$time) <= 0);
-                        $times++;
-                    }
+                if(my $report = $self->get_fact($guid)) {
+                    $update = $report->{metadata}{core}{update_time};
+                    $self->{report}{guid}   = $guid;
+                    next    if($self->parse_report(report => $report)); # true if invalid report
 
-                    last    if($times == @times);   # stop if all past endh
-
-#                    last    if($update gt $end && $last gt $end);
-#                    $prev = $last;
-#                    $last = $update;
+                    if($self->store_report()) { $self->_log(".. stored"); $self->{stored}++;    }
+                    else                      { $self->_log(".. already stored");       }
+                    if($self->cache_report()) { $self->_log(".. cached\n"); $self->{cached}++;  }
+                    else                      { $self->_log(".. bad cache data\n");     }
+                } else {
+                    $self->_log(".. FAIL\n");
                 }
             }
 
