@@ -1,5 +1,8 @@
 Revision history for Perl module CPAN::Testers::Data::Generator.
 
+1.08    2012-12-15
+        - fixes to make sure we move on if no reports processed.
+
 1.07    2012-12-06
         - updated README
         - rewritten generate method.
