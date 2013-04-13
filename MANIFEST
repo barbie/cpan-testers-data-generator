@@ -10,6 +10,7 @@ examples/cpanstats.sql
 examples/generate.sh
 examples/settings-example.ini
 lib/CPAN/Testers/Data/Generator.pm
+LICENSE
 Makefile.PL
 MANIFEST
 META.yml
