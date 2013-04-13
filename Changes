@@ -4,6 +4,8 @@ Revision history for Perl module CPAN-Testers-Data-Generator.
         - date clarification for lookups.
         - additional logging.
         - added LICENSE file.
+        - added cleanup process in test suite.
+        - added Test::Database to test suite.
 
 1.08    2012-12-15
         - fixes to make sure we move on if no reports processed.

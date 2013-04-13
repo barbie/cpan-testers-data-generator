@@ -109,9 +109,9 @@ sub new {
     }
 
     # build OS names map
-    @rows = $self->{CPANSTATS}->get_query('array','SELECT osname FROM osname');
+    @rows = $self->{CPANSTATS}->get_query('array','SELECT osname,ostitle FROM osname');
     for my $row (@rows) {
-        $self->{OSNAMES}{lc $row->[0]} ||= lc $row->[0];
+        $self->{OSNAMES}{lc $row->[0]} ||= $row->[1];
     }
     $OSNAMES = join('|',keys %{$self->{OSNAMES}})   if(keys %{$self->{OSNAMES}});
 
@@ -136,11 +136,18 @@ sub new {
         }
     }
 
-    $self->{metabase} = CPAN::Testers::Metabase::AWS->new(
-        bucket      => $self->{aws_bucket},
-        namespace   => $self->{aws_namespace},
-    );
-    $self->{librarian} = $self->{metabase}->public_librarian;
+    eval {
+        $self->{metabase} = CPAN::Testers::Metabase::AWS->new(
+            bucket      => $self->{aws_bucket},
+            namespace   => $self->{aws_namespace},
+        );
+        $self->{librarian} = $self->{metabase}->public_librarian;
+    };
+
+    # if we require remote access, we need the librarian
+    unless($hash{localonly}) {
+        return  unless($self->{metabase} && $self->{librarian});
+    }
 
     return $self;
 }
@@ -1231,7 +1238,7 @@ sub _osname {
     my $uname = uc $name;
     $self->{OSNAMES}{$lname} ||= do {
         $self->{CPANSTATS}->do_query(qq{INSERT INTO osname (osname,ostitle) VALUES ('$name','$uname')});
-        $lname;
+        $uname;
     };
 
     return $self->{OSNAMES}{$lname};
