@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.08';
+$VERSION = '1.09';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -1717,7 +1717,7 @@ changes, a new name was given to the distribution.
 
 =head2 CPAN-Testers-Data-Generator
 
-  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2012
+  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2013
 
 =head1 LICENSE
 
