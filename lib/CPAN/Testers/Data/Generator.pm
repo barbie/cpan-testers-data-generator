@@ -168,7 +168,7 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
         my @date = localtime(time);
-        my $maxdate = sprintf '%04d-%02d-%02dT00:00:00Z', $date[5]+1900, $date[4]+1,$date[3];
+        my $maxdate = sprintf '%04d-%02d-%02dT%02d:%02d:%02dZ', $date[5]+1900, $date[4]+1,$date[3],$date[2],$date[1],$date[0];
 
         my $data = $self->get_next_dates($maxdate);
     
@@ -476,13 +476,18 @@ sub get_tail_guids {
 
 sub get_next_dates {
     my ($self,$to) = @_;
-    my @data;
+    my (@data,$from);
 
-    my $from;
-    my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase ORDER BY updated DESC LIMIT 5');
+    my @time = localtime(time);
+    my $time = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $time[5]+1900,$time[4]+1,$time[3], $time[2],$time[1],$time[0];
+
+    # note that because Amazon's SimpleDB can return odd entries out of sync, we have to look at previous entries
+    # to ensure we are starting from the right point. Also ignore date/times in the future.
+    my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase WHERE updated <= ? ORDER BY updated DESC LIMIT 10',$time);
     for my $row (@rows) {
         if($from) {
-            my $diff = _date_diff($from,$row->[0]);
+            my $diff = abs( _date_diff($from,$row->[0]) ); # just interested in the difference
+            $self->_log("get_next_dates from=[$from], updated=[$row->[0]], diff=$diff, DIFF=$DIFF\n");
             next if($diff < $DIFF);
         }
 
@@ -490,6 +495,13 @@ sub get_next_dates {
     }
 
     $from ||= '1999-01-01T00:00:00Z';
+    if($from gt $to) {
+        my $xx = $from;
+        $from  = $to;
+        $to    = $xx;
+    }
+
+    $self->_log("NEXT from=[$from], to=[$to]\n");
 
     while($from lt $to) {
         my @from = $from =~ /(\d+)\-(\d+)\-(\d+)T(\d+):(\d+):(\d+)/;
@@ -513,20 +525,22 @@ sub get_next_dates {
 
 sub get_next_guids {
     my ($self,$start) = @_;
-    my ($guids,$time);
+    my ($guids);
 
-    $self->_log("PRE time=[$self->{time}], last=[$self->{last}]\n");
+    $self->_log("PRE time=[$self->{time}], last=[$self->{last}], start=[".($start||'')."]\n");
 
     if($start) {
         $self->{time} = $start;
     } else {
-        # note that because Amazon's SimpleDB can return odd entries out of 
-        # sync, we have to look at previous entries to ensure we are starting
-        # from the right point
-        my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase ORDER BY updated DESC LIMIT 5');
+        my @time = localtime(time);
+        my $time = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $time[5]+1900,$time[4]+1,$time[3], $time[2],$time[1],$time[0];
+
+        # note that because Amazon's SimpleDB can return odd entries out of sync, we have to look at previous entries
+        # to ensure we are starting from the right point. Also ignore date/times in the future.
+        my @rows = $self->{METABASE}->get_query('array','SELECT updated FROM metabase WHERE updated <= ? ORDER BY updated DESC LIMIT 10',$time);
         for my $row (@rows) {
             if($self->{time}) {
-                my $diff = _date_diff($self->{time},$row->[0]);
+                my $diff = abs( _date_diff($self->{time},$row->[0]) ); # just interested in the difference
                 next if($diff < $DIFF);
             }
 
@@ -1005,12 +1019,12 @@ sub _consume_reports {
             $self->_log("BAD DATES: start=$start, end=$end [end before start]\n");
             next;
         }
-        if($end gt $maxdate) {
-            $self->_log("BAD DATES: start=$start, end=$end [exceeds $maxdate]\n");
-            next;
-        }
+#        if($end gt $maxdate) {
+#            $self->_log("BAD DATES: start=$start, end=$end [exceeds $maxdate]\n");
+#            next;
+#        }
 
-        $self->_log("start=$start, end=$end\n");
+        $self->_log("LOOP: start=$start, end=$end\n");
 
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
@@ -1026,12 +1040,15 @@ sub _consume_reports {
         my @times = ();
 
         while($update le $end) {
+            $self->_log("UPDATE: update=$update, end=$end\n");
 
             # get list of guids from last update date
             my $guids = $self->get_next_guids($update);
             last    unless($guids);
 
             @guids = grep { !$guids{$_} } @$guids;
+            last    unless(@guids);
+
             for my $guid (@guids) {
                 # don't process too far
                 shift @times    if(@times > 9);                     # one off
