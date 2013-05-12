@@ -4,7 +4,7 @@ use strict;
 $|=1;
 
 use File::Path;
-use Test::More tests => 4;
+use Test::More tests => 2;
 
 eval "use Test::Database";
 my $notd = $@ ? 1 : 0;
@@ -19,10 +19,10 @@ unless($notd) {
 }
 
 for my $d ('t/_DBDIR','test') {
-    ok( rmtree( $d ), "removed '$d'" );
+    rmtree( $d ) if(-d $d);
     if($^O =~ /Win32/i) {
         ok(1);
     } else {
-        ok( ! -d $d,      "removed '$d' verified" );
+        ok( ! -d $d, "removed '$d' verified" );
     }
 }

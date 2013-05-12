@@ -51,7 +51,7 @@ my @test_meta_rows = (
 # TEST INTERNALS
 
 SKIP: {
-    skip "Test::Database required for DB testing", 21 unless(-f $config);
+    skip "Test::Database required for DB testing", 23 unless(-f $config);
 
     # prep test directory
     my $directory = './test';

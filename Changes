@@ -1,5 +1,9 @@
 Revision history for Perl module CPAN-Testers-Data-Generator.
 
+1.10    2013-05-12
+        - fixed skip test count.
+        - fixed cleanup of directory removal.
+
 1.09    2013-04-14
         - date clarification for lookups.
         - additional logging.
