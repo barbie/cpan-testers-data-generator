@@ -198,33 +198,6 @@ $self->_log("CHECK nonstop=$nonstop\n");
 $self->_log("STOP GENERATE nonstop=$nonstop\n");
 }
 
-sub _generate_old {
-    my $self    = shift;
-    my $nonstop = shift || 0;
-    my @reports;
-
-    $self->{reparse} = 0;
-
-$self->_log("START GENERATE nonstop=$nonstop\n");
-
-    do {
-        my $start = localtime(time);
-        ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
-
-        my $guids = $self->get_next_guids();
-        $self->retrieve_reports($guids,$start);
-
-        $nonstop = 0	if($self->{processed} == 0);
-        $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
-
-        $self->load_uploads()	if($nonstop);
-        $self->load_authors()	if($nonstop);
-
-$self->_log("CHECK nonstop=$nonstop\n");
-    } while($nonstop);
-$self->_log("STOP GENERATE nonstop=$nonstop\n");
-}
-
 sub regenerate {
     my ($self,$hash) = @_;
 
