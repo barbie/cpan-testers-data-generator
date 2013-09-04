@@ -15,6 +15,9 @@ The distribution requires the following modules:
   CPAN::Testers::Fact::TestSummary
   CPAN::Testers::Metabase::AWS
   CPAN::Testers::Report
+  Data::FlexSerializer
+  DateTime
+  DateTime::Duration
   File::Basename
   File::Path
   File::Slurp
@@ -33,6 +36,8 @@ The distribution requires the following modules:
   # used by run scripts
   Getopt::Long
   Getopt::ArgvFile
+
+
 
 
 INSTALLATION

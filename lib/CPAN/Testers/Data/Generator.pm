@@ -13,6 +13,7 @@ use Config::IniFiles;
 use CPAN::Testers::Common::Article;
 use CPAN::Testers::Common::DBUtils;
 #use Data::Dumper;
+use Data::FlexSerializer;
 use DateTime;
 use DateTime::Duration;
 use File::Basename;
@@ -148,6 +149,11 @@ sub new {
     unless($hash{localonly}) {
         return  unless($self->{metabase} && $self->{librarian});
     }
+
+    # reports are now stored in a compressed format
+    $self->{serializer} = Data::FlexSerializer->new(
+        detect_compression => 1,
+    );
 
     return $self;
 }
@@ -296,6 +302,8 @@ $self->_log("START sql=[$sql]\n");
             warn "No report returned [$row->{id},$row->{guid}]\n";
             next;
         }
+
+        $row->{report} = $self->{serializer}->deserialize($row->{report});
 
         $self->{report}{id}       = $row->{id};
         $self->{report}{guid}     = $row->{guid};
@@ -633,7 +641,8 @@ sub already_saved {
 sub load_fact {
     my ($self,$guid,$check) = @_;
     my @rows = $self->{METABASE}->get_query('array','SELECT report FROM metabase WHERE guid=?',$guid);
-    return $rows[0]->[0] if(@rows);
+
+    return $self->{serializer}->deserialize($rows[0]->[0])  if(@rows);
 
     $self->_log(" ... no report [guid=$guid]\n")    unless($check);
     return;
@@ -936,8 +945,11 @@ sub cache_report {
     return 1 if($self->{check});
     return 1 if($self->{localonly});
 
+    my $json = encode_json($self->{report}{metabase};
+    my $data = $self->{serializer}->serialize($json);
+
     $self->{METABASE}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report) VALUES (?,?,?,?)',
-        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},encode_json($self->{report}{metabase}));
+        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},$data));
 
     if((++$self->{meta_count} % 500) == 0) {
         $self->{METABASE}->do_commit;
