@@ -945,11 +945,11 @@ sub cache_report {
     return 1 if($self->{check});
     return 1 if($self->{localonly});
 
-    my $json = encode_json($self->{report}{metabase};
+    my $json = encode_json($self->{report}{metabase});
     my $data = $self->{serializer}->serialize($json);
 
     $self->{METABASE}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report) VALUES (?,?,?,?)',
-        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},$data));
+        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},$data);
 
     if((++$self->{meta_count} % 500) == 0) {
         $self->{METABASE}->do_commit;
