@@ -1,6 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+1.11    2013-09-08
         - added Data::FlexSerializer functionality to compress reports.
         - added missing prerequisite, Metabase::Resource.
 

@@ -26,6 +26,7 @@ The distribution requires the following modules:
   JSON
   Metabase
   Metabase::Fact
+  Metabase::Resource
   Time::Local
 
   # underlying Database requirements
@@ -36,9 +37,6 @@ The distribution requires the following modules:
   # used by run scripts
   Getopt::Long
   Getopt::ArgvFile
-
-
-
 
 INSTALLATION
 
