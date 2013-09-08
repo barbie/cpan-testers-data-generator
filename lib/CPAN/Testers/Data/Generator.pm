@@ -26,6 +26,7 @@ use Time::Local;
 
 use Metabase    0.004;
 use Metabase::Fact;
+use Metabase::Resource;
 use CPAN::Testers::Fact::LegacyReport;
 use CPAN::Testers::Fact::TestSummary;
 use CPAN::Testers::Metabase::AWS;
@@ -515,7 +516,7 @@ sub get_next_guids {
     my ($self,$start) = @_;
     my ($guids);
 
-    $self->_log("PRE time=[$self->{time}], last=[$self->{last}], start=[".($start||'')."]\n");
+    $self->_log("PRE time=[".($self->{time}||'')."], last=[".($self->{last}||'')."], start=[".($start||'')."]\n");
 
     if($start) {
         $self->{time} = $start;
@@ -545,7 +546,7 @@ sub get_next_guids {
         }
     }
 
-    $self->_log("START time=[$self->{time}], last=[$self->{last}]\n");
+    $self->_log("START time=[$self->{time}], last=[".($self->{last}||'')."]\n");
     $self->{last} = $self->{time};
 
     eval {
@@ -645,7 +646,7 @@ sub parse_report {
     my @facts = $report->facts();
     for my $fact (@facts) {
         if(ref $fact eq 'CPAN::Testers::Fact::TestSummary') {
-            $self->{report}{metabase}{'CPAN::Testers::Fact::TestSummary'} = $fact->as_struct ;
+            $self->{report}{metabase}{'CPAN::Testers::Fact::TestSummary'} = $fact->as_struct;
 
             $self->{report}{state}      = lc $fact->{content}{grade};
             $self->{report}{platform}   = $fact->{content}{archname};

@@ -34,6 +34,7 @@ WriteMakefile(
         'JSON'                              => 0,
         'Metabase'                          => 0.014,
         'Metabase::Fact'                    => 0,
+        'Metabase::Resource'                => 0,
         'Time::Local'                       => 0,
 
         'DBI'                               => 0,
