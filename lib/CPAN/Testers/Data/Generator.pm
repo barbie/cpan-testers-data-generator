@@ -513,13 +513,14 @@ sub get_next_dates {
 }
 
 sub get_next_guids {
-    my ($self,$start) = @_;
+    my ($self,$start,$end) = @_;
     my ($guids);
 
-    $self->_log("PRE time=[".($self->{time}||'')."], last=[".($self->{last}||'')."], start=[".($start||'')."]\n");
+    $self->_log("PRE time=[".($self->{time}||'')."], last=[".($self->{last}||'')."], start=[".($start||'')."], end=[".($end||'')."]\n");
 
     if($start) {
-        $self->{time} = $start;
+        $self->{time}       = $start;
+        $self->{time_to}    = $end || '';
     } else {
         my @time = localtime(time);
         my $time = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $time[5]+1900,$time[4]+1,$time[3], $time[2],$time[1],$time[0];
@@ -550,12 +551,21 @@ sub get_next_guids {
     $self->{last} = $self->{time};
 
     eval {
-    	$guids = $self->{librarian}->search(
-        	'core.type'         => 'CPAN-Testers-Report',
-        	'core.update_time'  => { ">=", $self->{time} },
-        	'-asc'              => 'core.update_time',
-        	'-limit'            => $self->{poll_limit},
-    	);
+        if($self->{time_to}) {
+            $guids = $self->{librarian}->search(
+                'core.type'         => 'CPAN-Testers-Report',
+                'core.update_time'  => { -and => { [ ">=", $self->{time} ], [ "<=", $self->{time_to} ] } },
+                '-asc'              => 'core.update_time',
+                '-limit'            => $self->{poll_limit},
+            );
+        } else {
+            $guids = $self->{librarian}->search(
+                'core.type'         => 'CPAN-Testers-Report',
+                'core.update_time'  => { ">=", $self->{time} },
+                '-asc'              => 'core.update_time',
+                '-limit'            => $self->{poll_limit},
+            );
+        }
     };
 
     $self->_log(" ... Metabase Search Failed [$@]\n") if($@);
@@ -1036,7 +1046,7 @@ sub _consume_reports {
             $self->_log("UPDATE: update=$update, end=$end\n");
 
             # get list of guids from last update date
-            my $guids = $self->get_next_guids($update);
+            my $guids = $self->get_next_guids($update,$end);
             last    unless($guids);
 
             @guids = grep { !$guids{$_} } @$guids;
