@@ -1742,7 +1742,7 @@ changes, a new name was given to the distribution.
 
 =head2 CPAN-Testers-Data-Generator
 
-  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2013
+  Original author:    Barbie       <barbie@cpan.org>   (C) 2008-2014
 
 =head1 LICENSE
 
