@@ -23,7 +23,6 @@ requires:
   DateTime::Duration:                 0
   DBI:                                0
   DBD::mysql:                         0
-  DBD::SQLite:                        1.07
   File::Basename:                     0
   File::Path:                         0
   File::Slurp:                        0

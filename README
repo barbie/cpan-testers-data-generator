@@ -32,7 +32,6 @@ The distribution requires the following modules:
   # underlying Database requirements
   DBI
   DBD::mysql
-  DBD::SQLite
   
   # used by run scripts
   Getopt::Long

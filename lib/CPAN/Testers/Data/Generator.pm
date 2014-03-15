@@ -1530,14 +1530,13 @@ to define the database access and general operation settings.
 
 Starting from the last cached report, retrieves all the more recent reports
 from the Metabase Report Submission server, parsing each and recording each
-report in both the cpanstats databases (MySQL & SQLite) and the metabase cache
-database.
+report in both the cpanstats database and the metabase cache database.
 
 =item * regenerate
 
 For a given date range, retrieves all the reports from the Metabase Report 
 Submission server, parsing each and recording each report in both the cpanstats
-databases (MySQL & SQLite) and the metabase cache database.
+database and the metabase cache database.
 
 Note that as only 2500 can be returned at any one time due to Amazon SimpleDB
 restrictions, this method will only process the guids returned from a given
