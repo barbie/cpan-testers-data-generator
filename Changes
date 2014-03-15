@@ -2,6 +2,10 @@ Revision history for CPAN-Testers-Data-Generator
 ================================================
 
         - specify the end timestamp when getting the guids in a date range.
+        - store complete report (using Sereal) in db as metabase.fact. Also 
+          retrieve and de-reference facts hash from 'fact' field, as 'report' 
+          field will be dropped once the 'fact' field is populated for all 
+          reports (including historical ones).
 
 1.11    2013-09-08
         - added Data::FlexSerializer functionality to compress reports.

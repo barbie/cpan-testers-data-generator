@@ -153,7 +153,11 @@ sub new {
 
     # reports are now stored in a compressed format
     $self->{serializer} = Data::FlexSerializer->new(
+        detect_compression => 1
+    );
+    $self->{serializer2} = Data::FlexSerializer->new(
         detect_compression => 1,
+        output_format => 'sereal'
     );
 
     return $self;
@@ -270,18 +274,20 @@ $self->_log("START sql=[$sql]\n");
         $self->_log("GUID [$row->{guid}]");
         $self->{processed}++;
 
-        # no article for that id!
-        unless($row->{report}) {
+        if($row->{fact}) {
+            $self->{fact}   = $self->{serializer2}->deserialize($row->{fact});
+            $self->{facts}  = $self->dereference_report($self->{fact});
+        } elsif($row->{report}) {
+            $row->{facts}   = decode_json($self->{serializer}->deserialize($row->{report}));
+        } else {
             $self->_log(" ... no report\n");
             warn "No report returned [$row->{id},$row->{guid}]\n";
             next;
         }
 
-        $row->{report} = $self->{serializer}->deserialize($row->{report});
-
         $self->{report}{id}       = $row->{id};
         $self->{report}{guid}     = $row->{guid};
-        $self->{report}{metabase} = decode_json($row->{report});
+        $self->{report}{metabase} = $self->{facts};
 
         # corrupt cached report?
         if($self->reparse_report()) { # true if invalid report
@@ -374,7 +380,7 @@ $self->_log("START REPARSE\n");
         $report = $self->load_fact($guid)    unless($hash->{force});
 
         if($report) {
-            $self->{report}{metabase} = decode_json($report);
+            $self->{report}{metabase} = $report;
             $self->{report}{guid} = $guid;
             $hash->{report} = $report;
             if($self->reparse_report(%$hash)) {	# true if invalid report
@@ -624,9 +630,22 @@ sub already_saved {
 
 sub load_fact {
     my ($self,$guid,$check) = @_;
-    my @rows = $self->{METABASE}->get_query('array','SELECT report FROM metabase WHERE guid=?',$guid);
+    my @rows = $self->{METABASE}->get_query('hash','SELECT report,fact FROM metabase WHERE guid=?',$guid);
 
-    return $self->{serializer}->deserialize($rows[0]->[0])  if(@rows);
+    if(@rows) {
+        my $row = $rows[0];
+        
+        if($row->{fact}) {
+            $self->{fact} = $self->{serializer2}->deserialize($row->{fact});
+            $self->{facts} = $self->dereference_report($self->{fact});
+            return $self->{facts};
+        }
+        
+        if($row->{report}) {
+            $self->{facts} = $self->{serializer}->deserialize($row->{report});
+            return $self->{facts};
+        }
+    }
 
     $self->_log(" ... no report [guid=$guid]\n")    unless($check);
     return;
@@ -637,10 +656,27 @@ sub get_fact {
     my $fact;
     #print STDERR "guid=$guid\n";
     eval { $fact = $self->{librarian}->extract( $guid ) };
-    return $fact    if($fact);
+
+    if($fact) {
+        $self->{fact} = $fact;
+        return $fact;
+    }
 
     $self->_log(" ... no report [guid=$guid] [$@]\n");
     return;
+}
+
+sub dereference_report {
+    my ($self,$report) = @_;
+    my %facts;
+
+    my @facts = $report->facts();
+    for my $fact (@facts) {
+        my $name = ref $fact;
+        $facts{$name} = $fact->as_struct;
+    }
+
+    return \%facts;
 }
 
 sub parse_report {
@@ -931,9 +967,10 @@ sub cache_report {
 
     my $json = encode_json($self->{report}{metabase});
     my $data = $self->{serializer}->serialize($json);
+    my $fact = $self->{serializer2}->serialize($self->{fact});
 
-    $self->{METABASE}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report) VALUES (?,?,?,?)',
-        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},$data);
+    $self->{METABASE}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report,fact) VALUES (?,?,?,?,?)',
+        $self->{report}{guid},$self->{report}{id},$self->{report}{updated},$data,$fact);
 
     if((++$self->{meta_count} % 500) == 0) {
         $self->{METABASE}->do_commit;
