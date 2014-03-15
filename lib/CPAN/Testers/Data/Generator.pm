@@ -705,6 +705,7 @@ sub parse_report {
             my $dist                    = Metabase::Resource->new( $fact->resource );
             $self->{report}{dist}       = $dist->metadata->{dist_name};
             $self->{report}{version}    = $dist->metadata->{dist_version};
+            $self->{report}{resource}   = $dist->metadata->{resource};
 
             # some distros are a pain!
 	    	if($self->{report}{version} eq '' && $MAPPINGS{$self->{report}{dist}}) {
@@ -750,12 +751,14 @@ sub parse_report {
         $self->{report}{fulldate}   = sprintf "%04d%02d%02d%02d%02d", $created[5]+1900, $created[4]+1, $created[3], $created[2], $created[1];
     }
 
-$self->{msg} .= ".. time [$self->{report}{created}][$self->{report}{updated}]";
+    $self->{msg} .= ".. time [$self->{report}{created}][$self->{report}{updated}]";
 
     $self->{report}{type}       = 2;
     if($self->{DISABLE} && $self->{DISABLE}{$self->{report}{from}}) {
         $self->{report}{state} .= ':invalid';
         $self->{report}{type}   = 3;
+    } elsif($self->{report}{response} =~ m!/perl6/!) {
+        $self->{report}{type}   = 6;
     }
 
     #print STDERR "\n====\nreport=".Dumper($self->{report});
@@ -788,6 +791,7 @@ sub reparse_report {
     my $dist                    = Metabase::Resource->new( $report->{metadata}{core}{resource} );
     $self->{report}{dist}       = $dist->metadata->{dist_name};
     $self->{report}{version}    = $dist->metadata->{dist_version};
+    $self->{report}{resource}   = $dist->metadata->{resource};
 
     $self->{report}{from}       = $self->_get_tester( $report->{metadata}{core}{creator}{resource} );
 
@@ -805,6 +809,8 @@ sub reparse_report {
     if($self->{DISABLE} && $self->{DISABLE}{$self->{report}{from}}) {
         $self->{report}{state} .= ':invalid';
         $self->{report}{type}   = 3;
+    } elsif($self->{report}{response} =~ m!/perl6/!) {
+        $self->{report}{type}   = 6;
     }
 
     return 1  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));
@@ -900,7 +906,7 @@ sub store_report {
     # perl version components
     my ($perl,$patch,$devel) = $self->_get_perl_version($fields{perl});
 
-    # only valid reports
+    # only valid perl5 reports
     if($self->{report}{type} == 2) {
         $fields{id} =  $self->{report}{id};
 
