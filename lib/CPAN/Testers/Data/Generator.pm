@@ -757,7 +757,8 @@ sub parse_report {
         $self->{report}{state} .= ':invalid';
         $self->{report}{type}   = 3;
     } elsif($self->{report}{response} =~ m!/perl6/!) {
-        $self->{report}{type}   = 6;
+#        $self->{report}{type}   = 6;
+        return 1;
     }
 
     #print STDERR "\n====\nreport=".Dumper($self->{report});
@@ -809,7 +810,8 @@ sub reparse_report {
         $self->{report}{state} .= ':invalid';
         $self->{report}{type}   = 3;
     } elsif($self->{report}{response} =~ m!/perl6/!) {
-        $self->{report}{type}   = 6;
+#        $self->{report}{type}   = 6;
+        return 1;
     }
 
     return 1  unless($self->_valid_field($guid, 'dist'     => $self->{report}{dist})     || ($options && $options->{exclude}{dist}));

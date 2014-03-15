@@ -8,7 +8,8 @@ Revision history for CPAN-Testers-Data-Generator
           reports (including historical ones).
         - rollback end timestamp (for now), until storage bug fixed.
         - expand test suite.
-        - store perl6 reports with type=6.
+        - store perl6 reports with type=6. Amended to ignore these for the
+          moment, as this needs to be determined by different metadata.
         - remove SQLite references.
 
 1.11    2013-09-08
