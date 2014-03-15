@@ -9,6 +9,7 @@ Revision history for CPAN-Testers-Data-Generator
         - rollback end timestamp (for now), until storage bug fixed.
         - expand test suite.
         - store perl6 reports with type=6.
+        - remove SQLite references.
 
 1.11    2013-09-08
         - added Data::FlexSerializer functionality to compress reports.

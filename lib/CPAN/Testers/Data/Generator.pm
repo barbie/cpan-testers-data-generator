@@ -83,7 +83,7 @@ sub new {
     my $cfg = Config::IniFiles->new( -file => $hash{config} );
 
     # configure databases
-    for my $db (qw(CPANSTATS METABASE)) { # LITESTATS
+    for my $db (qw(CPANSTATS METABASE)) {
         die "No configuration for $db database\n"   unless($cfg->SectionExists($db));
         my %opts = map {$_ => ($cfg->val($db,$_)||undef);} qw(driver database dbfile dbhost dbport dbuser dbpass);
         $opts{AutoCommit} = 0;
@@ -267,7 +267,6 @@ $self->_log("START REBUILD\n");
 $self->_log("START sql=[$sql]\n");
 
 #    $self->{CPANSTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
-#    $self->{LITESTATS}->do_query("DELETE FROM cpanstats WHERE id >= $start AND id <= $end");
 
     my $iterator = $self->{METABASE}->iterator('hash',$sql);
     while(my $row = $iterator->()) {
@@ -444,7 +443,7 @@ $self->_log("STOP TAIL\n");
 
 sub commit {
     my $self = shift;
-    for(qw(CPANSTATS)) { # LITESTATS
+    for(qw(CPANSTATS)) {
         next    unless($self->{$_});
         $self->{$_}->do_commit;
     }
@@ -847,20 +846,14 @@ sub store_report {
     my %SQL = (
         'SELECT' => {
             CPANSTATS => 'SELECT id FROM cpanstats WHERE guid=?',
-            LITESTATS => 'SELECT id FROM cpanstats WHERE guid=?',
             RELEASE   => 'SELECT id FROM release_data WHERE guid=?',
         },
         'INSERT' => {
             CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-            LITESTATS => 'INSERT INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
             RELEASE   => 'INSERT INTO release_data (id,guid,dist,version,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-        },
-        'REPLACE' => {
-            LITESTATS => 'REPLACE INTO cpanstats (id,guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
         },
         'UPDATE' => {
             CPANSTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
-            LITESTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
             RELEASE   => 'UPDATE release_data SET id=?,dist=?,version=?,oncpan=?,distmat=?,perlmat=?,patched=?,pass=?,fail=?,na=?,unknown=? WHERE guid=?',
         },
     );
@@ -889,19 +882,6 @@ sub store_report {
 
     # in check mode, assume the rest happens
     return 1 if($self->{check});
-
-    # update the sqlite database
-#    $self->{LITESTATS}->do_query($SQL{REPLACE}{LITESTATS},$self->{report}{id},@values);
-
-#    @rows = $self->{LITESTATS}->get_query('array',$SQL{SELECT}{LITESTATS},$values[0]);
-#    if(@rows) {
-#        if($self->{reparse}) {
-#            my ($guid,@update) = @values;
-#            $self->{LITESTATS}->do_query($SQL{UPDATE}{LITESTATS},@update,$guid);
-#        }
-#    } else {
-#        $self->{LITESTATS}->do_query($SQL{INSERT}{LITESTATS},$self->{report}{id},@values);
-#    }
 
     # perl version components
     my ($perl,$patch,$devel) = $self->_get_perl_version($fields{perl});
