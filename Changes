@@ -7,6 +7,7 @@ Revision history for CPAN-Testers-Data-Generator
           field will be dropped once the 'fact' field is populated for all 
           reports (including historical ones).
         - rollback end timestamp (for now), until storage bug fixed.
+        - expand test suite.
 
 1.11    2013-09-08
         - added Data::FlexSerializer functionality to compress reports.
