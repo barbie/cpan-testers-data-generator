@@ -557,21 +557,21 @@ sub get_next_guids {
     $self->{last} = $self->{time};
 
     eval {
-        if($self->{time_to}) {
-            $guids = $self->{librarian}->search(
-                'core.type'         => 'CPAN-Testers-Report',
-                'core.update_time'  => { -and => { [ ">=", $self->{time} ], [ "<=", $self->{time_to} ] } },
-                '-asc'              => 'core.update_time',
-                '-limit'            => $self->{poll_limit},
-            );
-        } else {
+#        if($self->{time_to}) {
+#            $guids = $self->{librarian}->search(
+#                'core.type'         => 'CPAN-Testers-Report',
+#                'core.update_time'  => { -and => { [ ">=", $self->{time} ], [ "<=", $self->{time_to} ] } },
+#                '-asc'              => 'core.update_time',
+#                '-limit'            => $self->{poll_limit},
+#            );
+#        } else {
             $guids = $self->{librarian}->search(
                 'core.type'         => 'CPAN-Testers-Report',
                 'core.update_time'  => { ">=", $self->{time} },
                 '-asc'              => 'core.update_time',
                 '-limit'            => $self->{poll_limit},
             );
-        }
+#        }
     };
 
     $self->_log(" ... Metabase Search Failed [$@]\n") if($@);
