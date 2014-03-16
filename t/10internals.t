@@ -43,7 +43,7 @@ SKIP: {
     rmtree($directory);
     mkpath($directory) or die "cannot create directory";
 
-    is($loader->count_cpanstats(),5,'Internal Tests, metabase contains 5 reports');
+    is($loader->count_cpanstats(),5,'Internal Tests, cpanstats contains 5 reports');
     is($loader->count_metabase(),5,'Internal Tests, metabase contains 5 reports');
 
     my $t;
