@@ -153,10 +153,13 @@ sub new {
 
     # reports are now stored in a compressed format
     $self->{serializer} = Data::FlexSerializer->new(
-        detect_compression => 1
+        detect_compression => 1,
+        detect_json => 1,
+        output_format => 'json'
     );
     $self->{serializer2} = Data::FlexSerializer->new(
         detect_compression => 1,
+        detect_sereal => 1,
         output_format => 'sereal'
     );
 
@@ -673,6 +676,7 @@ sub dereference_report {
     for my $fact (@facts) {
         my $name = ref $fact;
         $facts{$name} = $fact->as_struct;
+        $facts{$name}{content} = decode_json($facts{$name}{content});
     }
 
     return \%facts;
@@ -692,6 +696,7 @@ sub parse_report {
     for my $fact (@facts) {
         if(ref $fact eq 'CPAN::Testers::Fact::TestSummary') {
             $self->{report}{metabase}{'CPAN::Testers::Fact::TestSummary'} = $fact->as_struct;
+            $self->{report}{metabase}{'CPAN::Testers::Fact::TestSummary'}{content} = decode_json($self->{report}{metabase}{'CPAN::Testers::Fact::TestSummary'}{content});
 
             $self->{report}{state}      = lc $fact->{content}{grade};
             $self->{report}{platform}   = $fact->{content}{archname};
@@ -725,6 +730,7 @@ sub parse_report {
 
         } elsif(ref $fact eq 'CPAN::Testers::Fact::LegacyReport') {
             $self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'} = $fact->as_struct;
+            $self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'}{content} = decode_json($self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'}{content});
             $invalid = 'missing textreport' if(length $fact->{content}{textreport} < 10);   # what is the smallest report?
 
             $self->{report}{perl}       = $fact->{content}{perl_version};
@@ -953,9 +959,15 @@ sub cache_report {
     return 1 if($self->{check});
     return 1 if($self->{localonly});
 
-    my $json = encode_json($self->{report}{metabase});
-    my $data = $self->{serializer}->serialize($json);
-    my $fact = $self->{serializer2}->serialize($self->{fact});
+    my ($json,$data,$fact);
+
+    eval { $json = encode_json($self->{report}{metabase}); };
+    eval { $data = $self->{serializer}->serialize("$json"); };
+    eval { $data = $self->{serializer}->serialize( $self->{report}{metabase} ); }   if($@);
+    eval { $fact = $self->{serializer2}->serialize($self->{fact}); };
+
+    $data ||= '';
+    $fact ||= '';
 
     $self->{METABASE}->do_query('INSERT IGNORE INTO metabase (guid,id,updated,report,fact) VALUES (?,?,?,?,?)',
         $self->{report}{guid},$self->{report}{id},$self->{report}{updated},$data,$fact);
@@ -1620,6 +1632,12 @@ Get a specific report fact for a given GUID, from the local database.
 =item * get_fact
 
 Get a specific report fact for a given GUID, from the Metabase.
+
+=item * dereference_report
+
+When you retrieve the parent report fact from the database, you'll need to 
+dereference it to ensure the child elements contain the child facts in the
+correct format for processing.
 
 =item * parse_report
 
