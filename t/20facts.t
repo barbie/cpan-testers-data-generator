@@ -16,7 +16,7 @@ use IO::File;
 use Metabase::Resource;
 use Metabase::Resource::cpan::distfile;
 use Metabase::Resource::metabase::user;
-use Test::More tests => 8;
+use Test::More tests => 11;
 
 use lib qw(t/lib);
 use Fake::Librarian;
@@ -72,4 +72,27 @@ SKIP: {
     my $report = $t->dereference_report($fact);
     is($report->{'CPAN::Testers::Fact::LegacyReport'}{metadata}{core}{guid},'4f977e8a-08d2-11e3-bc0a-b75d6d822b3f','.. got LegacyReport fact');
     is($report->{'CPAN::Testers::Fact::TestSummary'}{metadata}{core}{guid},'4f9786b4-08d2-11e3-bc0a-b75d6d822b3f','.. got TestSummary fact');
+
+    $t->{report}{guid} = '4f976d00-08d2-11e3-bc0a-b75d6d822b3f';
+
+    my $res = $t->parse_report(report => $fact);
+    is($res,0,'..parsed report');
+
+
+    $res = $t->store_report();
+    is($res,1,'..stored cpanstats report');
+    $res = $t->store_report();
+    is($res,0,'..already stored cpanstats report');
+
+#    diag(Dumper($t->{report}{metabase}));
+#
+#    $res = $t->cache_report();
+#    is($res,1,'..stored metabase report');
+#    $res = $t->cache_report();
+#    is($res,0,'..already stored metabase report');
+
+#    $fact = $t->load_fact('4f976d00-08d2-11e3-bc0a-b75d6d822b3f');
+#    is($fact->{'CPAN::Testers::Fact::LegacyReport'}{metadata}{core}{guid},'4f977e8a-08d2-11e3-bc0a-b75d6d822b3f','.. got LegacyReport fact');
+#    is($fact->{'CPAN::Testers::Fact::TestSummary'}{metadata}{core}{guid},'4f9786b4-08d2-11e3-bc0a-b75d6d822b3f','.. got TestSummary fact');
+
 }
