@@ -756,7 +756,7 @@ sub parse_report {
     if($self->{DISABLE} && $self->{DISABLE}{$self->{report}{from}}) {
         $self->{report}{state} .= ':invalid';
         $self->{report}{type}   = 3;
-    } elsif($self->{report}{response} =~ m!/perl6/!) {
+    } elsif($self->{report}{response} && $self->{report}{response} =~ m!/perl6/!) {
 #        $self->{report}{type}   = 6;
         return 1;
     }
@@ -809,7 +809,7 @@ sub reparse_report {
     if($self->{DISABLE} && $self->{DISABLE}{$self->{report}{from}}) {
         $self->{report}{state} .= ':invalid';
         $self->{report}{type}   = 3;
-    } elsif($self->{report}{response} =~ m!/perl6/!) {
+    } elsif($self->{report}{response} && $self->{report}{response} =~ m!/perl6/!) {
 #        $self->{report}{type}   = 6;
         return 1;
     }
@@ -947,7 +947,7 @@ sub store_report {
 
 sub cache_report {
     my $self = shift;
-    return  unless($self->{report}{guid} && $self->{report}{metabase});
+    return 0 unless($self->{report}{guid} && $self->{report}{metabase});
 
     # in check mode, assume the rest happens
     return 1 if($self->{check});
@@ -969,7 +969,7 @@ sub cache_report {
 
 sub cache_update {
     my $self = shift;
-    return  unless($self->{report}{guid} && $self->{report}{id});
+    return 0 unless($self->{report}{guid} && $self->{report}{id});
 
     # in check mode, assume the rest happens
     return 1 if($self->{check});
