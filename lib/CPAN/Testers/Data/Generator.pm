@@ -1459,6 +1459,7 @@ main table, as below:
     `id`        int(10) unsigned    NOT NULL,
     `updated`   varchar(32)         DEFAULT NULL,
     `report`    longblob            NOT NULL,
+    `fact`      longblob            NOT NULL,
   
     PRIMARY KEY     (`guid`),
     KEY `id`        (`id`),
@@ -1466,8 +1467,12 @@ main table, as below:
   
   )
 
-The report field is JSON encoded, and is a cached version of the one extracted
-from Metabase::Librarian.
+The id field is a reference to the cpanstats.id field.
+
+The report field is JSON encoded, and is a cached version of the facts of a 
+report, while the fact field is the full report fact, and associated child 
+facts, Sereal encoded. Both are extracted from the returned fact from
+Metabase::Librarian.
 
 See F<examples/cpanstats-createdb> for the full list of tables used.
 
@@ -1697,7 +1702,7 @@ Saves any new Perl versions
 
 The CPAN Testers was conceived back in May 1998 by Graham Barr and Chris
 Nandor as a way to provide multi-platform testing for modules. Today there
-are over 24 million tester reports and more than 100 testers each month
+are over 40 million tester reports and more than 100 testers each month
 giving valuable feedback for users and authors alike.
 
 =head1 BECOME A TESTER
