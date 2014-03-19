@@ -34,6 +34,7 @@ t/data/cpanstats.sql
 t/data/metabase.sql
 t/data/testers_email.sql
 t/lib/Fake/Loader.pm
+t/lib/Fake/Librarian.pm
 t/test-config.ini
 templates/mail-bad-reports.eml
 templates/mail-bad-uploads.eml
