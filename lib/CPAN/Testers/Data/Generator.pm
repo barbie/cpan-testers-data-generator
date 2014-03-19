@@ -4,7 +4,7 @@ use warnings;
 use strict;
 
 use vars qw($VERSION);
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 #----------------------------------------------------------------------------
 # Library Modules
@@ -153,14 +153,14 @@ sub new {
 
     # reports are now stored in a compressed format
     $self->{serializer} = Data::FlexSerializer->new(
-        detect_compression => 1,
-        detect_json => 1,
-        output_format => 'json'
+        detect_compression  => 1,
+        detect_json         => 1,
+        output_format       => 'json'
     );
     $self->{serializer2} = Data::FlexSerializer->new(
-        detect_compression => 1,
-        detect_sereal => 1,
-        output_format => 'sereal'
+        detect_compression  => 1,
+        detect_sereal       => 1,
+        output_format       => 'sereal'
     );
 
     return $self;
