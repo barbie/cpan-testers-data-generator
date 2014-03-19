@@ -89,7 +89,8 @@ sub new {
         $opts{AutoCommit} = 0;
         $self->{$db} = CPAN::Testers::Common::DBUtils->new(%opts);
         die "Cannot configure $db database\n" unless($self->{$db});
-        $self->{$db}->{'mysql_enable_utf8'} = 1 if($opts{driver} =~ /mysql/i);
+        $self->{$db}->{'mysql_enable_utf8'}    = 1 if($opts{driver} =~ /mysql/i);
+        $self->{$db}->{'mysql_auto_reconnect'} = 1 if($opts{driver} =~ /mysql/i);
     }
 
     if($cfg->SectionExists('ADMINISTRATION')) {
