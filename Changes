@@ -2,6 +2,7 @@ Revision history for CPAN-Testers-Data-Generator
 ================================================
 
         - enable mysql_auto_reconnect.
+        - updates from live fixes.
 
 1.12    2014-03-19
         - specify the end timestamp when getting the guids in a date range.

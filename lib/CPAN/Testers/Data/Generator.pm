@@ -525,7 +525,11 @@ sub get_next_guids {
     my ($self,$start,$end) = @_;
     my ($guids);
 
-    $self->_log("PRE time=[".($self->{time}||'')."], last=[".($self->{last}||'')."], start=[".($start||'')."], end=[".($end||'')."]\n");
+    $self->{time} ||= 0;
+    $self->{last} ||= 0;
+    $start ||= 0;
+
+    $self->_log("PRE time=[$self->{time}], last=[$self->{last}], start=[".($start||'')."], end=[".($end||'')."]\n");
 
     if($start) {
         $self->{time}       = $start;
@@ -556,14 +560,14 @@ sub get_next_guids {
         }
     }
 
-    $self->_log("START time=[$self->{time}], last=[".($self->{last}||'')."]\n");
+    $self->_log("START time=[$self->{time}], last=[$self->{last}]\n");
     $self->{last} = $self->{time};
 
     eval {
 #        if($self->{time_to}) {
 #            $guids = $self->{librarian}->search(
 #                'core.type'         => 'CPAN-Testers-Report',
-#                'core.update_time'  => { -and => { [ ">=", $self->{time} ], [ "<=", $self->{time_to} ] } },
+#                'core.update_time'  => { -and => { ">=" => $self->{time}, "<=" => $self->{time_to} } },
 #                '-asc'              => 'core.update_time',
 #                '-limit'            => $self->{poll_limit},
 #            );
@@ -1080,8 +1084,11 @@ sub _consume_reports {
         my ($update,$prev,$last) = ($start,$start,$start);
         my @times = ();
 
+        my $saved = 0;
         while($update le $end) {
-            $self->_log("UPDATE: update=$update, end=$end\n");
+            $self->_log("UPDATE: update=$update, end=$end, saved=$saved, guids=".(scalar(@guids))."\n");
+
+            last    if($saved >= @guids);
 
             # get list of guids from last update date
             my $guids = $self->get_next_guids($update,$end);
@@ -1107,6 +1114,7 @@ sub _consume_reports {
                 if(my $time = $self->already_saved($guid)) {
                     $self->_log(".. already saved\n");
                     $update = $time;
+                    $saved++;
                     next;
                 }
 
