@@ -1,6 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+1.14    2014-03-22
         - arch os no longer needs to decode JSON.
 
 1.13    2014-03-20
