@@ -179,6 +179,7 @@ sub DESTROY {
 sub generate {
     my $self    = shift;
     my $nonstop = shift || 0;
+    my $maxdate = shift;
     my @reports;
 
     $self->{reparse} = 0;
@@ -189,8 +190,10 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
         my $start = localtime(time);
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
-        my @date = localtime(time);
-        my $maxdate = sprintf '%04d-%02d-%02dT%02d:%02d:%02dZ', $date[5]+1900, $date[4]+1,$date[3],$date[2],$date[1],$date[0];
+        unless($maxdate) {
+            my @date = localtime(time);
+            $maxdate = sprintf '%04d-%02d-%02dT%02d:%02d:%02dZ', $date[5]+1900, $date[4]+1,$date[3],$date[2],$date[1],$date[0];
+        }
 
         my $data = $self->get_next_dates($maxdate);
     
@@ -243,6 +246,7 @@ sub regenerate {
 
 sub rebuild {
     my ($self,$hash) = @_;
+$self->_log("START REBUILD\n");
 
     my $start = localtime(time);
     ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
@@ -251,7 +255,6 @@ sub rebuild {
     $self->{localonly} = $hash->{localonly} ? 1 : 0;
     $self->{check}     = $hash->{check}     ? 1 : 0;
 
-$self->_log("START REBUILD\n");
 
     # selection choices:
     # 1) from guid [to guid]
@@ -277,12 +280,9 @@ $self->_log("START sql=[$sql]\n");
         $self->_log("GUID [$row->{guid}]");
         $self->{processed}++;
 
-        if($row->{fact}) {
-            $self->{fact}   = $self->{serializer2}->deserialize($row->{fact});
-            $self->{facts}  = $self->dereference_report($self->{fact});
-        } elsif($row->{report}) {
-            $row->{facts}   = decode_json($self->{serializer}->deserialize($row->{report}));
-        } else {
+        my $report = $self->load_fact(undef,0,$row);
+
+        unless($report) {
             $self->_log(" ... no report\n");
             warn "No report returned [$row->{id},$row->{guid}]\n";
             next;
@@ -573,17 +573,19 @@ sub get_next_guids {
 #            );
 #        } else {
             $guids = $self->{librarian}->search(
-                'core.type'         => 'CPAN-Testers-Report',
-                'core.update_time'  => { ">=", $self->{time} },
-                '-asc'              => 'core.update_time',
-                '-limit'            => $self->{poll_limit},
+                '-where'  => [ 
+                    '-and' => 
+                        [ '-eq' => 'core.type'         => 'CPAN-Testers-Report' ],
+                        [ '-ge' => 'core.update_time'  => $self->{time} ]
+                ],
+                '-order'  => [ '-asc' => 'core.update_time' ],
+                '-limit'  => $self->{poll_limit},
             );
 #        }
     };
 
     $self->_log(" ... Metabase Search Failed [$@]\n") if($@);
     $self->_log("Retrieved ".($guids ? scalar(@$guids) : 0)." guids\n");
-
     return $guids;
 }
 
@@ -636,12 +638,14 @@ sub already_saved {
 }
 
 sub load_fact {
-    my ($self,$guid,$check) = @_;
-    my @rows = $self->{METABASE}->get_query('hash','SELECT report,fact FROM metabase WHERE guid=?',$guid);
+    my ($self,$guid,$check,$row) = @_;
 
-    if(@rows) {
-        my $row = $rows[0];
-        
+    if(!$row && $guid) {
+        my @rows = $self->{METABASE}->get_query('hash','SELECT report,fact FROM metabase WHERE guid=?',$guid);
+        $row = $rows[0]  if(@rows);
+    }
+
+    if($row) {
         if($row->{fact}) {
             $self->{fact} = $self->{serializer2}->deserialize($row->{fact});
             $self->{facts} = $self->dereference_report($self->{fact});
@@ -789,6 +793,8 @@ sub reparse_report {
     my ($self,%hash) = @_;
     my $fact = 'CPAN::Testers::Fact::TestSummary';
     my $options = $hash{options};
+
+    $self->{report}{metabase}{$fact}{content} = encode_json($self->{report}{metabase}{$fact}{content});
     my $report  = CPAN::Testers::Fact::TestSummary->from_struct( $self->{report}{metabase}{$fact} );
     my $guid    = $self->{report}{guid};
 
@@ -1084,11 +1090,10 @@ sub _consume_reports {
         my ($update,$prev,$last) = ($start,$start,$start);
         my @times = ();
 
+        my $prior = [ 0, 0 ];
         my $saved = 0;
-        while($update le $end) {
+        while($update lt $end) {
             $self->_log("UPDATE: update=$update, end=$end, saved=$saved, guids=".(scalar(@guids))."\n");
-
-            last    if($saved >= @guids);
 
             # get list of guids from last update date
             my $guids = $self->get_next_guids($update,$end);
@@ -1096,14 +1101,19 @@ sub _consume_reports {
 
             @guids = grep { !$guids{$_} } @$guids;
             last    unless(@guids);
+            last    if($prior->[0] eq $guids[0] && $prior->[1] eq $guids[-1]);  # prevent an endless loop
+            $prior = [ $guids[0], $guids[-1] ];
 
+            $self->_log("UPDATE: todo guids=".(scalar(@guids))."\n");
+
+            my $current = $update;
             for my $guid (@guids) {
                 # don't process too far
-                shift @times    if(@times > 9);                     # one off
-                push @times, _date_diff($end,$update) <= 0 ? 0 : 1; # one on ... max 10
+                shift @times    if(@times > 9);                         # one off
+                push @times, [ $current, (_date_diff($end,$current) <= 0 ? 0 : 1) ];    # one on ... max 10
 
                 my $times = 0;
-                $times += $_    for(@times);
+                $times += $_->[1]    for(@times);
                 last    if($times == 10);                           # stop if all greater than end
 
                 # okay process
@@ -1113,13 +1123,13 @@ sub _consume_reports {
 
                 if(my $time = $self->already_saved($guid)) {
                     $self->_log(".. already saved\n");
-                    $update = $time;
+                    $current = $time;
                     $saved++;
                     next;
                 }
 
                 if(my $report = $self->get_fact($guid)) {
-                    $update = $report->{metadata}{core}{update_time};
+                    $current = $report->{metadata}{core}{update_time};
                     $self->{report}{guid}   = $guid;
                     next    if($self->parse_report(report => $report)); # true if invalid report
 
@@ -1131,6 +1141,8 @@ sub _consume_reports {
                     $self->_log(".. FAIL\n");
                 }
             }
+
+            $update = $times[0]->[0];
 
             $self->commit();
         }
