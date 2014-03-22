@@ -1296,8 +1296,8 @@ sub _check_arch_os {
     return	if($text && $self->{report}{osname} && lc $text eq lc $self->{report}{osname});
 
 #print STDERR "_check: metabase=".Dumper($self->{report}{metabase})."\n";
-    my $fact = decode_json($self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'}{content});
-    my $textreport = $fact->{textreport};
+    my $textreport = $self->{report}{metabase}{'CPAN::Testers::Fact::LegacyReport'}{content}{textreport};
+    $textreport =~ s/\\n/\n/g; # newlines may be escaped
 
     # create a fake mail, as CTC::Article parses a mail like text block
     my $mail = <<EMAIL;

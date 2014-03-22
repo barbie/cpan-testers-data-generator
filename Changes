@@ -1,6 +1,8 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+        - arch os no longer needs to decode JSON.
+
 1.13    2014-03-20
         - enable mysql_auto_reconnect.
         - updates from live fixes.
