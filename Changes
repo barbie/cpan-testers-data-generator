@@ -2,6 +2,7 @@ Revision history for CPAN-Testers-Data-Generator
 ================================================
 
         - finally upgraded to Metabase-1.003.
+        - extended test suite.
 
 1.14    2014-03-22
         - arch os no longer needs to decode JSON.

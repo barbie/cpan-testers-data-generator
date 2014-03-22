@@ -18,6 +18,8 @@ README
 t/01base.t
 t/10internals.t
 t/20facts.t
+t/30parse.t
+t/31generate.t
 t/89cleanup.t
 t/90podtest.t
 t/91podcover.t
