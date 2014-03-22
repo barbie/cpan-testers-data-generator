@@ -9,6 +9,8 @@ use strict;
 #----------------------------------------------------------------------------
 # Libraries
 
+use lib qw(lib);
+
 use CPAN::Testers::Data::Generator;
 use Data::Dumper;
 use File::Path;

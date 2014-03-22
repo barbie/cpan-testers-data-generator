@@ -10,6 +10,8 @@ use strict;
 #----------------------------------------------------------------------------
 # Libraries
 
+use lib qw(lib);
+
 use Config::IniFiles;
 use CPAN::Testers::Common::DBUtils;
 use CPAN::Testers::Data::Generator;
@@ -18,7 +20,7 @@ use CPAN::Testers::Metabase::AWS;
 use File::Path;
 use IO::File;
 use JSON;
-use Test::More tests => 22;
+use Test::More tests => 27;
 
 use lib qw(t/lib);
 use Fake::Loader;
@@ -56,6 +58,8 @@ SKIP: {
     };
 
     isa_ok($t,'CPAN::Testers::Data::Generator');
+
+    is($t->_get_lastid(),33579060,'.. last id');
 
     #diag(Dumper($@))    if($@);
 
@@ -100,4 +104,15 @@ SKIP: {
     $t->_check_arch_os();
     is($t->{report}{osname},'linux','.. set OS');
     is($t->{report}{platform},'i686-linux-thread-multi-64int','.. set platform');
+}
+
+my @dates = (
+    [ '2014-03-22T00:00:00Z', '2014-03-22T00:00:01Z', 1     ], # regular time
+    [ '2014-03-30T00:59:59Z', '2014-03-30T02:00:01Z', 2     ], # spring forward
+    [ '2014-03-22T00:00:00Z', '2014-03-23T00:00:00Z', 86400 ], # 1 day
+    [ '2014-03-22T00:00:00Z', '', -1                        ], # bad date
+);
+
+for my $dates (@dates) {
+    is(CPAN::Testers::Data::Generator::_date_diff($dates->[0],$dates->[1]),$dates->[2],'returns correct time');
 }
