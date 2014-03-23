@@ -38,7 +38,7 @@ my $loader = Fake::Loader->new();
 # TEST INTERNALS
 
 SKIP: {
-    skip "Test::Database required for DB testing", 22 unless($loader);
+    skip "Test::Database required for DB testing", 23 unless($loader);
 
     # prep test directory
     my $directory = './test';

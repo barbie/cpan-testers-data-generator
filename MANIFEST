@@ -16,6 +16,7 @@ META.yml
 META.json
 README
 t/01base.t
+t/05create-db.t
 t/10internals.t
 t/20facts.t
 t/30parse.t
