@@ -32,7 +32,7 @@ WriteMakefile(
         'HTML::Entities'                    => 0,
         'IO::File'                          => 0,
         'JSON'                              => 0,
-        'Metabase'                          => 1.993,
+        'Metabase'                          => 1.003,
         'Metabase::Fact'                    => 0.023,
         'Metabase::Resource'                => 0.023,
         'Sereal'                            => 0,
