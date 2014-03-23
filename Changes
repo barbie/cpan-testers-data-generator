@@ -1,6 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+1.15    2014-03-23
         - finally upgraded to Metabase-1.003.
         - extended test suite.
 
