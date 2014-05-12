@@ -18,7 +18,7 @@ use IO::File;
 use Metabase::Resource;
 use Metabase::Resource::cpan::distfile;
 use Metabase::Resource::metabase::user;
-use Test::More tests => 18;
+use Test::More tests => 22;
 
 use lib qw(t/lib);
 use Fake::Loader;
@@ -103,6 +103,26 @@ SKIP: {
             localonly   => 1,
             dstart      => '2014-03-14T11:58:54Z',
             dend        => '2014-03-14T11:59:54Z'
+        });
+
+        $t->{CPANSTATS}->do_commit;
+        $t->{METABASE}->do_commit;
+
+        is($loader->count_cpanstats(),18,'Internal Tests, cpanstats contains 18 reports');
+        is($loader->count_metabase(),18,'Internal Tests, metabase contains 18 reports');
+
+        $t->regenerate({
+            file        => 't/data/regenerate.txt'
+        });
+
+        $t->{CPANSTATS}->do_commit;
+        $t->{METABASE}->do_commit;
+
+        is($loader->count_cpanstats(),18,'Internal Tests, cpanstats contains 18 reports');
+        is($loader->count_metabase(),18,'Internal Tests, metabase contains 18 reports');
+
+        $t->regenerate({
+            file        => 't/data/regenerate2.txt'
         });
 
         $t->{CPANSTATS}->do_commit;
