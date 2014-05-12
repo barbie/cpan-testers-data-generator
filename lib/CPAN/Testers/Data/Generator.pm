@@ -180,7 +180,7 @@ sub generate {
     my $self    = shift;
     my $nonstop = shift || 0;
     my $maxdate = shift;
-    my @reports;
+    my ($to,@reports);
 
     $self->{reparse} = 0;
 
@@ -190,17 +190,21 @@ $self->_log("START GENERATE nonstop=$nonstop\n");
         my $start = localtime(time);
         ($self->{processed},$self->{stored},$self->{cached}) = (0,0,0);
 
-        unless($maxdate) {
-            my @date = localtime(time);
-            $maxdate = sprintf '%04d-%02d-%02dT%02d:%02d:%02dZ', $date[5]+1900, $date[4]+1,$date[3],$date[2],$date[1],$date[0];
+        if($maxdate) {
+            $to = $maxdate;
+        } else {
+            $to = sprintf "%sT%sZ", DateTime->now->ymd, DateTime->now->hms;
         }
 
-        my $data = $self->get_next_dates($maxdate);
+$self->_log("DATES maxdate=$maxdate, to=$to \n");
+
+        my $data = $self->get_next_dates($to);
     
-        $self->_consume_reports( $maxdate, $data );
+        $self->_consume_reports( $to, $data );
 
         $nonstop = 0	if($self->{processed} == 0);
         $nonstop = 0	if($self->{stopfile} && -f $self->{stopfile});
+        $nonstop = 0	if($maxdate && $maxdate le $to);
 
         $self->load_uploads()	if($nonstop);
         $self->load_authors()	if($nonstop);
@@ -215,8 +219,7 @@ sub regenerate {
 
     $self->{reparse} = 0;
 
-    my @date = localtime(time);
-    my $maxdate = sprintf '%04d-%02d-%02dT00:00:00Z', $date[5]+1900, $date[4]+1,$date[3];
+    my $maxdate = sprintf "%sT%sZ", DateTime->now->ymd, DateTime->now->hms;
 
     $self->_log("START REGENERATE\n");
 
@@ -476,8 +479,9 @@ sub get_next_dates {
     my ($self,$to) = @_;
     my (@data,$from);
 
-    my @time = localtime(time);
-    my $time = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $time[5]+1900,$time[4]+1,$time[3], $time[2],$time[1],$time[0];
+    my $time = sprintf "%sT%sZ", DateTime->now->ymd, DateTime->now->hms;
+
+$self->_log("DATES to=$to, time=$time\n");
 
     # note that because Amazon's SimpleDB can return odd entries out of sync, we have to look at previous entries
     # to ensure we are starting from the right point. Also ignore date/times in the future.
@@ -535,8 +539,7 @@ sub get_next_guids {
         $self->{time}       = $start;
         $self->{time_to}    = $end || '';
     } else {
-        my @time = localtime(time);
-        my $time = sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ", $time[5]+1900,$time[4]+1,$time[3], $time[2],$time[1],$time[0];
+        my $time = sprintf "%sT%sZ", DateTime->now->ymd, DateTime->now->hms;
 
         # note that because Amazon's SimpleDB can return odd entries out of sync, we have to look at previous entries
         # to ensure we are starting from the right point. Also ignore date/times in the future.
@@ -1122,7 +1125,7 @@ sub _consume_reports {
                 $self->{processed}++;
 
                 if(my $time = $self->already_saved($guid)) {
-                    $self->_log(".. already saved\n");
+                    $self->_log(".. already saved [$time]\n");
                     $current = $time;
                     $saved++;
                     next;
