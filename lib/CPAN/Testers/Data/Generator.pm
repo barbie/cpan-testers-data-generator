@@ -230,9 +230,9 @@ sub regenerate {
             s/\s+$//;
             my ($fval,$tval) = split(/,/,$_,2);
             my %data;
-            $data{gstart} = $fval   if($fval =~ /^\w+-\w+-\w+-\w+$/);
+            $data{gstart} = $fval   if($fval =~ /^\w+-\w+-\w+-\w+-\w+$/);
             $data{dstart} = $fval   if($fval =~ /^\d+-\d+-\d+T\d+:\d+:\d+Z$/);
-            $data{gend}   = $tval   if($tval =~ /^\w+-\w+-\w+-\w+$/);
+            $data{gend}   = $tval   if($tval =~ /^\w+-\w+-\w+-\w+-\w+$/);
             $data{dend}   = $tval   if($tval =~ /^\d+-\d+-\d+T\d+:\d+:\d+Z$/);
             push @data, \%data;
         }
@@ -1066,6 +1066,8 @@ sub _consume_reports {
         my $end   = $self->_get_createdate( $data->{gend},   $data->{dend} );
 
         unless($start && $end) {
+            $start ||= '';
+            $end   ||= '';
             $self->_log("BAD DATES: start=$start, end=$end [missing dates]\n");
             next;
         }

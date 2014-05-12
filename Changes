@@ -3,6 +3,7 @@ Revision history for CPAN-Testers-Data-Generator
 
         - move to using DateTime to calculate dates and times.
         - fixed distribution name in META.
+        - fixed _het_createdate guid pattern matching.
 
 1.15    2014-03-23
         - finally upgraded to Metabase-1.003.
