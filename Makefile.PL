@@ -8,7 +8,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     AUTHOR              => 'Barbie <barbie@cpan.org>',
-    NAME                => 'CPAN::Testers::Data::Generator',
+    NAME                => 'CPAN-Testers-Data-Generator',
     VERSION_FROM        => 'lib/CPAN/Testers/Data/Generator.pm',
     ABSTRACT            => 'CPAN Testers cpanstats Database Generator',
     NO_META             => 1,
