@@ -35,6 +35,8 @@ t/data/c9bb8cac-109c-11e3-9d5d-466d772db441.dat
 t/data/fbc49036-08ea-11e3-b8b2-96b61dda783b.dat
 t/data/cpanstats.sql
 t/data/metabase.sql
+t/data/regenerate.txt
+t/data/regenerate2.txt
 t/data/testers_email.sql
 t/lib/Fake/Loader.pm
 t/lib/Fake/Librarian.pm
