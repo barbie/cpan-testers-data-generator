@@ -1,7 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
-1.16    2014-05-14
+1.16    2014-05-15
         - move to using DateTime to calculate dates and times.
         - fixed distribution name in META.
         - fixed _get_createdate guid pattern matching.
