@@ -873,6 +873,7 @@ sub store_report {
         'INSERT' => {
             CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
             RELEASE   => 'INSERT INTO release_data (id,guid,dist,version,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            PASSES    => 'INSERT IGNORE passreports SET platform=?, osname=?, perl=?, dist=?, postdate=?',
         },
         'UPDATE' => {
             CPANSTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
@@ -956,6 +957,16 @@ sub store_report {
                 $fields{state} eq 'na'      ? 1 : 0,
                 $fields{state} eq 'unknown' ? 1 : 0);
         }
+    }
+
+    if($fields{state) eq 'pass') {
+        $fields{perl} =~ s/\s.*//;  # only need to know the main release
+        $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{PASSES},
+            $fields{platform},
+            $fields{osname},
+            $fields{perl},
+            $fields{dist},
+            $fields{postdate});
     }
 
     if((++$self->{stat_count} % 500) == 0) {
