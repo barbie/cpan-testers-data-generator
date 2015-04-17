@@ -48,7 +48,7 @@ my @guids = (
 # TEST INTERNALS
 
 SKIP: {
-    skip "Test::Database required for DB testing", 18 unless($loader);
+    skip "Test::Database required for DB testing", 22 unless($loader);
 
     # prep test directory
     my $directory = './test';
@@ -65,7 +65,7 @@ SKIP: {
     };
 
     SKIP: {
-        skip "AWS profile required for live testing", 18 unless($t);
+        skip "AWS profile required for live testing", 22 unless($t);
 
         isa_ok($t,'CPAN::Testers::Data::Generator');
 
