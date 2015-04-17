@@ -1,6 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+1.19    2015-04-17
         - fixed date/time timezone bug (thanks Slaven).
 
 1.18    2015-04-17
