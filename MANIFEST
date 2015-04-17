@@ -3,6 +3,7 @@ bin/cpanstats-delete
 bin/cpanstats-select
 bin/cpanstats-update
 Changes
+examples/build-pass-reports.pl
 examples/cpanstats-createdb
 examples/cpanstats-verify.sh
 examples/cpanstats.sql
