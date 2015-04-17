@@ -959,9 +959,9 @@ sub store_report {
         }
     }
 
-    if($fields{state) eq 'pass') {
+    if($fields{state} eq 'pass') {
         $fields{perl} =~ s/\s.*//;  # only need to know the main release
-        $self->{report}{id} = $self->{CPANSTATS}->id_query($SQL{INSERT}{PASSES},
+        $self->{CPANSTATS}->do_query($SQL{INSERT}{PASSES},
             $fields{platform},
             $fields{osname},
             $fields{perl},
