@@ -246,7 +246,20 @@ sub create_mysql_databases {
             "INSERT INTO perl_version VALUES ('5.10.0','5.10.0',0,0)",
             "INSERT INTO perl_version VALUES ('5.11.0','5.11.0',0,1)",
             "INSERT INTO perl_version VALUES ('v5.10.0','5.10.0',0,0)",
-            "INSERT INTO perl_version VALUES ('5.12.0 RC1','5.12.0',1,0)"
+            "INSERT INTO perl_version VALUES ('5.12.0 RC1','5.12.0',1,0)",
+
+        'DROP TABLE IF EXISTS passreports',
+        'CREATE TABLE passreports (
+            platform   varchar(255),
+            osname     varchar(255),
+            perl       varchar(255),
+            postdate   varchar(8),
+            dist       varchar(255),
+            KEY PLATFORMIX (platform),
+            KEY OSNAMEIX (osname),
+            KEY PERLIX (perl),
+            KEY DATEIX (postdate)
+        )',
     );
 
     my @create_meta_mysql = (

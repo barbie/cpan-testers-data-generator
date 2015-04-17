@@ -1,6 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+1.18    2015-04-17
         - added insertion of PASS report data into passreports table.
         - added build-pass-reports.pl script to examples, for emergencies :)
         - maintain history of Bucket changes.
