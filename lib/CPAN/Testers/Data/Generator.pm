@@ -1763,6 +1763,7 @@ discussion mailing list.
 
 =head1 BUCKETS
 
+  beta6 - 2014-01-21
   beta7 - 2014-11-12
 
 =head1 BUGS, PATCHES & FIXES
