@@ -1761,6 +1761,10 @@ discussion mailing list.
   CPAN Testers Discuss mailing list
     - http://lists.cpan.org/showlist.cgi?name=cpan-testers-discuss
 
+=head1 BUCKETS
+
+  beta7 - 2014-11-12
+
 =head1 BUGS, PATCHES & FIXES
 
 There are no known bugs at the time of this release. However, if you spot a
