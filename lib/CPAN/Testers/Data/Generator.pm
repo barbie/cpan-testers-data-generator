@@ -1393,11 +1393,8 @@ sub _date_diff {
 
     return -1 unless(@dt1 && @dt2);
 
-    $dt1[1]--;
-    $dt2[1]--;
-
-    my $dt1 = timelocal(reverse @dt1);
-    my $dt2 = timelocal(reverse @dt2);
+    my $dt1 = DateTime->new( year => $dt1[0], month => $dt1[1], day => $dt1[2], hour => $dt1[3], minute => $dt1[4], second => $dt1[5], time_zone => 'UTC' )->epoch;
+    my $dt2 = DateTime->new( year => $dt2[0], month => $dt2[1], day => $dt2[2], hour => $dt2[3], minute => $dt2[4], second => $dt2[5], time_zone => 'UTC' )->epoch;
 
     return $dt2 - $dt1;
 }

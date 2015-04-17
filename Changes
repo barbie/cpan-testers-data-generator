@@ -1,6 +1,8 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+        - fixed date/time timezone bug (thanks Slaven).
+
 1.18    2015-04-17
         - added insertion of PASS report data into passreports table.
         - added build-pass-reports.pl script to examples, for emergencies :)
