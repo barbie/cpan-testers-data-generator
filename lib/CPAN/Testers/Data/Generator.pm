@@ -461,12 +461,21 @@ sub get_tail_guids {
     my $guids;
 
     eval {
+#        $guids = $self->{librarian}->search(
+#        	'core.type'         => 'CPAN-Testers-Report',
+#        	'core.update_time'  => { ">", 0 },
+#        	'-desc'             => 'core.update_time',
+#        	'-limit'            => $self->{poll_limit},
+#    	);
         $guids = $self->{librarian}->search(
-        	'core.type'         => 'CPAN-Testers-Report',
-        	'core.update_time'  => { ">", 0 },
-        	'-desc'             => 'core.update_time',
-        	'-limit'            => $self->{poll_limit},
-    	);
+            '-where'  => [
+                '-and' =>
+                    [ '-eq' => 'core.type'         => 'CPAN-Testers-Report' ],
+                    [ '-ge' => 'core.update_time'  => 0 ]
+            ],
+            '-order'  => [ '-desc' => 'core.update_time' ],
+            '-limit'  => $self->{poll_limit},
+        );
     };
 
     $self->_log(" ... Metabase Tail Failed [$@]\n") if($@);
