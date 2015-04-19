@@ -3,6 +3,7 @@ Revision history for CPAN-Testers-Data-Generator
 
         - fixed tail log searching.
         - ensure we are parsing a CPAN::Testers::Report object.
+        - added examples/metabase-get.pl to check GUID entries. 
 
 1.19    2015-04-17
         - fixed date/time timezone bug (thanks Slaven).

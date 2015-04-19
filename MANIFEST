@@ -8,6 +8,7 @@ examples/cpanstats-createdb
 examples/cpanstats-verify.sh
 examples/cpanstats.sql
 examples/generate.sh
+examples/metabase-get.pl
 examples/settings-example.ini
 lib/CPAN/Testers/Data/Generator.pm
 LICENSE
