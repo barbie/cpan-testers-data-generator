@@ -713,6 +713,11 @@ sub parse_report {
     $self->{report}{created} = $report->{metadata}{core}{creation_time};
     $self->{report}{updated} = $report->{metadata}{core}{update_time};
 
+    unless(ref($report) eq 'CPAN::Testers::Report') {
+        $self->{msg} .= ".. ref [" . ref($report) . "]";
+        return 1;
+    }
+
     my @facts = $report->facts();
     for my $fact (@facts) {
         if(ref $fact eq 'CPAN::Testers::Fact::TestSummary') {
