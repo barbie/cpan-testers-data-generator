@@ -40,6 +40,7 @@ t/data/metabase.sql
 t/data/regenerate.txt
 t/data/regenerate2.txt
 t/data/testers_email.sql
+t/data/uploads.sql
 t/lib/Fake/Loader.pm
 t/lib/Fake/Librarian.pm
 t/test-config.ini

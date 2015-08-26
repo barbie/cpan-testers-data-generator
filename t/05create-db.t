@@ -70,6 +70,7 @@ SKIP: {
     SKIP: {
         skip "Cannot create access to fake databases", 2 unless($loader);
 
+        $loader->create_uploads();
         $loader->create_cpanstats();
         $loader->create_metabase();
 
@@ -137,6 +138,7 @@ sub create_mysql_databases {
                 osname     varchar(255),
                 osvers     varchar(255),
                 fulldate   varchar(32),
+                uploadid    int(10) unsigned NOT NULL,
                 PRIMARY KEY (id))',
 
             'DROP TABLE IF EXISTS page_requests',
@@ -161,6 +163,7 @@ sub create_mysql_databases {
                 fail        int(10) default 0,
                 na          int(10) default 0,
                 unknown     int(10) default 0,
+                uploadid    int(10) unsigned NOT NULL,
                 PRIMARY KEY (id,guid),
                 INDEX (dist,version)
             )',
@@ -177,18 +180,20 @@ sub create_mysql_databases {
                 pass        int(10)    default 0,
                 fail        int(10)    default 0,
                 na          int(10)    default 0,
-                unknown     int(10)    default 0
+                unknown     int(10)    default 0,
+                uploadid    int(10) unsigned NOT NULL
             )',
 
             'DROP TABLE IF EXISTS uploads',
             'CREATE TABLE uploads (
+                uploadid    int(10) unsigned NOT NULL auto_increment,
                 type        varchar(10)  NOT NULL,
                 author      varchar(32)  NOT NULL,
                 dist        varchar(100) NOT NULL,
                 version     varchar(100) NOT NULL,
                 filename    varchar(255) NOT NULL,
                 released    int(16)	     NOT NULL,
-                PRIMARY KEY (author,dist,version)
+                PRIMARY KEY (uploadid)
             )',
 
             'DROP TABLE IF EXISTS ixlatest',
@@ -197,6 +202,7 @@ sub create_mysql_databases {
                 version     varchar(100) NOT NULL,
                 released    int(16)		 NOT NULL,
                 author      varchar(32)  NOT NULL,
+                uploadid    int(10) unsigned NOT NULL,
                 PRIMARY KEY (dist)
             )',
 

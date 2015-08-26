@@ -71,6 +71,17 @@ sub create_metabase {
     $fh->close;
 }
 
+sub create_uploads {
+    my $self = shift;
+
+    my $fh = IO::File->new("t/data/uploads.sql") or return 1;
+    while(<$fh>) {
+        s/(\s|;)*$//;
+        $self->{CPANSTATS}{dbh}->do_query($_);
+    }
+    $fh->close;
+}
+
 #----------------------------------------------------------------------------
 # Test Functions
 
