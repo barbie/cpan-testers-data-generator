@@ -870,12 +870,13 @@ sub retrieve_report {
 
 sub store_report {
     my $self    = shift;
-    my @fields  = qw(guid state postdate from dist version platform perl osname osvers fulldate type);
+    my @fields  = qw(guid state postdate from dist version platform perl osname osvers fulldate type uploadid);
 
     my %fields = map {$_ => $self->{report}{$_}} @fields;
-    $fields{$_} ||= 0   for(qw(type));
+    $fields{$_} ||= 0   for(qw(type uploadid));
     $fields{$_} ||= '0' for(qw(perl));
     $fields{$_} ||= ''  for(@fields);
+    $fields{uploadid} ||= $self->{upload}{$fields{dist}}{$fields{version}};
 
     my @values = map {$fields{$_}} @fields;
 
@@ -885,13 +886,13 @@ sub store_report {
             RELEASE   => 'SELECT id FROM release_data WHERE guid=?',
         },
         'INSERT' => {
-            CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-            RELEASE   => 'INSERT INTO release_data (id,guid,dist,version,oncpan,distmat,perlmat,patched,pass,fail,na,unknown) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            CPANSTATS => 'INSERT INTO cpanstats (guid,state,postdate,tester,dist,version,platform,perl,osname,osvers,fulldate,type,uploadid) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            RELEASE   => 'INSERT INTO release_data (id,guid,dist,version,oncpan,distmat,perlmat,patched,pass,fail,na,unknown,uploadid) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
             PASSES    => 'INSERT IGNORE passreports SET platform=?, osname=?, perl=?, dist=?, postdate=?',
         },
         'UPDATE' => {
-            CPANSTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=? WHERE guid=?',
-            RELEASE   => 'UPDATE release_data SET id=?,dist=?,version=?,oncpan=?,distmat=?,perlmat=?,patched=?,pass=?,fail=?,na=?,unknown=? WHERE guid=?',
+            CPANSTATS => 'UPDATE cpanstats SET state=?,postdate=?,tester=?,dist=?,version=?,platform=?,perl=?,osname=?,osvers=?,fulldate=?,type=?,uploadid=? WHERE guid=?',
+            RELEASE   => 'UPDATE release_data SET id=?,dist=?,version=?,oncpan=?,distmat=?,perlmat=?,patched=?,pass=?,fail=?,na=?,unknown=?,uploadid=? WHERE guid=?',
         },
     );
 
@@ -929,7 +930,7 @@ sub store_report {
 
         # push page requests
         # - note we only update the author if this is the *latest* version of the distribution
-        my $author = $self->{report}{pauseid} || $self->_get_author($fields{dist},$fields{version});
+        my $author = $self->{report}{pauseid} || $self->_get_author($fields{uploadid},$fields{dist},$fields{version});
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight,id) VALUES ('author',?,1,?)",$author,$fields{id})  if($author);
         $self->{CPANSTATS}->do_query("INSERT INTO page_requests (type,name,weight,id) VALUES ('distro',?,1,?)",$fields{dist},$fields{id});
 
@@ -941,7 +942,7 @@ sub store_report {
                     $fields{id},                        # id,
                     $fields{dist},$fields{version},     # dist, version
 
-                    $self->_oncpan($fields{dist},$fields{version}) ? 1 : 2,
+                    $self->_oncpan($fields{uploadid},$fields{dist},$fields{version}) ? 1 : 2,
 
                     $fields{version} =~ /_/     ? 2 : 1,
                     $devel                      ? 2 : 1,
@@ -952,6 +953,8 @@ sub store_report {
                     $fields{state} eq 'na'      ? 1 : 0,
                     $fields{state} eq 'unknown' ? 1 : 0,
 
+                    $fields{uploadid},
+
                     $fields{guid});             # guid
             }
         } else {
@@ -960,7 +963,7 @@ sub store_report {
                 $fields{id},$fields{guid},          # id, guid
                 $fields{dist},$fields{version},     # dist, version
 
-                $self->_oncpan($fields{dist},$fields{version}) ? 1 : 2,
+                $self->_oncpan($fields{uploadid},$fields{dist},$fields{version}) ? 1 : 2,
 
                 $fields{version} =~ /_/     ? 2 : 1,
                 $devel                      ? 2 : 1,
@@ -969,7 +972,9 @@ sub store_report {
                 $fields{state} eq 'pass'    ? 1 : 0,
                 $fields{state} eq 'fail'    ? 1 : 0,
                 $fields{state} eq 'na'      ? 1 : 0,
-                $fields{state} eq 'unknown' ? 1 : 0);
+                $fields{state} eq 'unknown' ? 1 : 0,
+
+                $fields{uploadid});
         }
     }
 
@@ -1041,18 +1046,20 @@ sub cache_update {
 sub load_uploads {
     my $self = shift;
 
-    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT dist,version,type FROM uploads');
+    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT uploadid,dist,version,type FROM uploads');
     for my $row (@rows) {
-        $self->{oncpan}{$row->{dist}}{$row->{version}} = $row->{type};
+        $self->{oncpan}{$row->{uploadid}} = $row->{type};
+        $self->{upload}{$row->{dist}}{$row->{version}} = $row->{uploadid};
     }
 }
 
 sub load_authors {
     my $self = shift;
 
-    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT author,dist,version FROM ixlatest');
+    my @rows = $self->{CPANSTATS}->get_query('hash','SELECT author,dist,version,uploadid FROM ixlatest');
     for my $row (@rows) {
         $self->{author}{$row->{dist}}{$row->{version}} = $row->{author};
+        $self->{author2}{$row->{uploadid}} = $row->{author};
     }
 }
 
@@ -1284,8 +1291,11 @@ sub _get_tester {
 }
 
 sub _get_author {
-    my ($self,$dist,$vers) = @_;
-    my $author = $self->{author}{$dist}{$vers} || '';
+    my ($self,$upid,$dist,$vers) = @_;
+
+    my $author = $self->{author2}{$upid} || '';
+    $author ||= $self->{author}{$dist}{$vers} || '';
+
     return $author;
 }
 
@@ -1305,9 +1315,10 @@ sub _get_lastid {
 }
 
 sub _oncpan {
-    my ($self,$dist,$vers) = @_;
-
-    my $type = $self->{oncpan}{$dist}{$vers};
+    my ($self,$upid,$dist,$vers) = @_;
+    
+    $upid ||= $self->{upload}{$dist}{$vers};
+    my $type = $self->{oncpan}{$upid};
 
     return 1    unless($type);          # assume it's a new release
     return 0    if($type eq 'backpan'); # on backpan only
