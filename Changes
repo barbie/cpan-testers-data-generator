@@ -1,6 +1,7 @@
 Revision history for CPAN-Testers-Data-Generator
 ================================================
 
+1.21    2015-08-26
         - uploads table now has a unique id as primary key.
         - cpanstats, release_data and release_summary tables now include an 
           uploadid field and index.
