@@ -59,7 +59,8 @@ CPAN Testers Server.
 ';
 
 my @admins = (
-    'barbie@missbarbell.co.uk',
+    'webmaster@cpantesters.org',
+    #'barbie@missbarbell.co.uk',
     #'david@dagolden.com'
 );
 
@@ -95,6 +96,9 @@ sub new {
 
     if($cfg->SectionExists('ADMINISTRATION')) {
         my @admins = $cfg->val('ADMINISTRATION','admins');
+        $self->{admins} = \@admins;
+    }
+    else {
         $self->{admins} = \@admins;
     }
 
